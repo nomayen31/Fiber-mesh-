@@ -352,21 +352,36 @@ Notes:
 
 ### Vercel
 
-1. Push the repo and import it in Vercel.
-2. Set the environment variables from the table above (`DATABASE_URL`,
-   `DATABASE_URL_UNPOOLED`, `ADMIN_PASSWORD`, `AUTH_SECRET`, `NEXT_PUBLIC_*`).
-3. Build command `npm run build`; the default `next build` output works.
-4. Apply migrations as a release step: `npm run db:deploy`.
+This project is deployed to Vercel as **`fiber-mesh`** with the GitHub repository
+`nomayen31/Fiber-mesh-` connected, so **every push to `main` deploys automatically**.
+
+* Region: `sin1` (Singapore — lowest latency to Bangladesh), set in `vercel.json`.
+* Build: `npm run build` (runs `prisma generate` first).
+* Env vars set for Production: `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `ADMIN_PASSWORD`,
+  `AUTH_SECRET`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_PHONE`, `NEXT_PUBLIC_PHONE_DISPLAY`,
+  `NEXT_PUBLIC_WHATSAPP`, `NEXT_PUBLIC_ADDRESS`, `NEXT_PUBLIC_FACEBOOK`,
+  `NEXT_PUBLIC_BUSINESS_HOURS`.
+
+Deploy from the CLI:
+
+```bash
+vercel link --project fiber-mesh     # once
+vercel env pull .env.local           # optional, pulls non-secret vars
+vercel --prod                        # build + promote to production
+```
 
 Notes:
 
-* Use the **pooled** URL for `DATABASE_URL`. On serverless platforms each instance opens its own
-  pool, so append `&connection_limit=1` to `DATABASE_URL` to avoid exhausting Postgres
+* Use the **pooled** URL for `DATABASE_URL`. Serverless functions each open their own pool, so the
+  production value carries `&connection_limit=1` — without it a traffic spike exhausts Postgres
   connections.
+* Apply migrations from a local machine (or CI), not from the build step:
+  `npm run db:deploy`. The build itself never touches the database.
 * `next.config.mjs` sets SOC-style security headers (`X-Frame-Options`, `Referrer-Policy`,
   `X-Content-Type-Options`, `Permissions-Policy`) and allows remote images over HTTPS.
 * All database-touching pages are `dynamic = "force-dynamic"`, so `next build` never needs a
   live database.
+* `NEXT_PUBLIC_*` values are baked in at build time — after changing one, redeploy.
 
 ### Any Node host
 
