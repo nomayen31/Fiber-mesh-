@@ -9,7 +9,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 /** PATCH /api/admin/inquiries/:id — mark as read / unread. */
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const denied = await guardAdmin();
+  const denied = await guardAdmin(request);
   if (denied) return denied;
 
   const { id } = await context.params;
@@ -33,8 +33,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 /** DELETE /api/admin/inquiries/:id */
-export async function DELETE(_request: NextRequest, context: RouteContext) {
-  const denied = await guardAdmin();
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  const denied = await guardAdmin(request);
   if (denied) return denied;
 
   const { id } = await context.params;

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /** GET /api/admin/inquiries — contact-form submissions. */
 export async function GET(request: NextRequest) {
-  const denied = await guardAdmin();
+  const denied = await guardAdmin(request);
   if (denied) return denied;
 
   const params = request.nextUrl.searchParams;

@@ -29,6 +29,22 @@ enum OrderSource {
   PHONE
 }
 
+/** Android is the only platform targeted today; iOS is reserved. */
+enum DevicePlatform {
+  ANDROID
+  IOS
+}
+
+/** Lifecycle of an outbox job and of each per-device delivery. */
+enum DeliveryStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  /** Nothing was attempted on purpose (e.g. push is not configured yet). */
+  SKIPPED
+}
+
 model Product {
   id          String     @id @default(cuid())
   slug        String     @unique
@@ -87,6 +103,9 @@ model Order {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
+  /** Push-notification outbox rows produced by this order. */
+  notifications NotificationJob[]
+
   @@index([status])
   @@index([createdAt])
   @@index([source])
@@ -105,4 +124,83 @@ model Inquiry {
 
   @@index([createdAt])
   @@index([isRead])
+}
+
+/* ───────────────────── push notifications (outbox) ───────────────────── */
+
+/**
+ * A registered Android device that should receive lead notifications.
+ *
+ * The Admin dashboard has a single shared identity today (`adminId` is always
+ * "admin"), but the column exists so per-admin routing becomes possible later
+ * without a migration. The FCM token is the natural primary key for
+ * de-duplication and carries its own unique constraint.
+ */
+model DeviceToken {
+  id         String         @id @default(cuid())
+  token      String         @unique
+  /** Session subject that registered the device. Never trusted from the client. */
+  adminId    String         @default("admin")
+  platform   DevicePlatform @default(ANDROID)
+  /** Optional human label, e.g. "Nomayen's phone". */
+  label      String?
+  isActive   Boolean        @default(true)
+  /** Last time the app re-registered this token (app start / token refresh). */
+  lastSeenAt DateTime       @default(now())
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  deliveries NotificationDelivery[]
+
+  @@index([adminId, isActive])
+  @@index([isActive, updatedAt])
+}
+
+/**
+ * Durable outbox job. `eventKey` is the idempotency guard: the same lead event
+ * can be processed any number of times and only ever produces one row.
+ */
+model NotificationJob {
+  id          String         @id @default(cuid())
+  /** e.g. "order.created:clx123..." — unique, so replays are no-ops. */
+  eventKey    String         @unique
+  /** "order.created" | "order.confirmed" | "inquiry.created". */
+  eventType   String
+  orderId     String?
+  order       Order?         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  title       String
+  body        String
+  /** FCM `data` payload (string values only). Never contains secrets. */
+  payload     Json           @default("{}")
+  status      DeliveryStatus @default(PENDING)
+  attempts    Int            @default(0)
+  sentCount   Int            @default(0)
+  failedCount Int            @default(0)
+  /** Truncated error text. Never contains tokens or credentials. */
+  lastError   String?
+  processedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  deliveries NotificationDelivery[]
+
+  @@index([status, createdAt])
+  @@index([orderId])
+}
+
+/** Per-device delivery attempt for a job (one row per device per job). */
+model NotificationDelivery {
+  id            String         @id @default(cuid())
+  jobId         String
+  job           NotificationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  deviceTokenId String
+  deviceToken   DeviceToken    @relation(fields: [deviceTokenId], references: [id], onDelete: Cascade)
+  status        DeliveryStatus @default(PENDING)
+  error         String?
+  messageId     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([jobId, deviceTokenId])
+  @@index([deviceTokenId])
 }

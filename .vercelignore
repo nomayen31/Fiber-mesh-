@@ -1,0 +1,12 @@
+# Vercel upload exclusions.
+#
+# `apps/lead-notify/` is the standalone Expo/React Native Android app. It is a
+# separate project with its own package.json, it is excluded from the root
+# tsconfig.json, and nothing in the Next.js app imports it. Excluding it here
+# keeps it out of the deployment upload entirely, so it cannot slow the build
+# down or accidentally influence it.
+apps/
+
+# Local build output that Vercel regenerates anyway.
+.next/
+node_modules/

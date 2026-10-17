@@ -269,6 +269,21 @@ export async function updateOrderStatus(id: string, status: OrderStatus) {
   });
 }
 
+/**
+ * One order, hydrated the same way `listOrders` hydrates its rows (dates as ISO
+ * strings) so the admin dashboard and the Android app render identical shapes.
+ * Returns `null` for an unknown id — the caller decides the HTTP status.
+ */
+export async function getOrderById(id: string) {
+  const order = await prisma.order.findUnique({ where: { id } });
+  if (!order) return null;
+  return {
+    ...order,
+    createdAt: order.createdAt.toISOString(),
+    updatedAt: order.updatedAt.toISOString(),
+  };
+}
+
 export async function deleteOrder(id: string) {
   return prisma.order.delete({ where: { id }, select: { id: true } });
 }

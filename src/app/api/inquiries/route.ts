@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 import { getClientIp, jsonError, jsonOk, rateLimit } from "@/lib/api";
 import { createInquiry } from "@/lib/inquiries";
+import { queueInquiryNotification } from "@/lib/notifications/dispatch";
+import { scheduleDispatch } from "@/lib/notifications/schedule";
 import { fieldErrors, inquiryCreateSchema } from "@/lib/validators";
 
 export const runtime = "nodejs";
@@ -41,7 +43,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await createInquiry(parsed.data);
+    const inquiry = await createInquiry(parsed.data);
+
+    const jobId = await queueInquiryNotification({
+      id: inquiry.id,
+      name: parsed.data.name,
+      subject: parsed.data.subject ? parsed.data.subject : null,
+    });
+    scheduleDispatch(jobId);
+
     return jsonOk({ ok: true });
   } catch (error) {
     console.error("[api/inquiries] failed to save inquiry:", error);

@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 import { guardAdmin, jsonError, jsonOk } from "@/lib/api";
 import { createManualOrder, listOrders } from "@/lib/orders";
+import { queueOrderNotification } from "@/lib/notifications/dispatch";
+import { scheduleDispatch } from "@/lib/notifications/schedule";
 import {
   adminOrderSchema,
   fieldErrors,
@@ -13,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 /** GET /api/admin/orders — paginated, filterable order list. */
 export async function GET(request: NextRequest) {
-  const denied = await guardAdmin();
+  const denied = await guardAdmin(request);
   if (denied) return denied;
 
   const searchParams = Object.fromEntries(
@@ -43,7 +45,7 @@ export async function GET(request: NextRequest) {
 
 /** POST /api/admin/orders — add a phone / offline order manually. */
 export async function POST(request: NextRequest) {
-  const denied = await guardAdmin();
+  const denied = await guardAdmin(request);
   if (denied) return denied;
 
   let payload: unknown;
@@ -66,6 +68,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const order = await createManualOrder({ ...parsed.data, createdAt: createdAt ?? "" });
+    const jobId = await queueOrderNotification(order, "order.created");
+    scheduleDispatch(jobId);
     return jsonOk({ ok: true, order }, 201);
   } catch (error) {
     console.error("[api/admin/orders] manual create failed:", error);

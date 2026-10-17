@@ -94,6 +94,22 @@ export const loginSchema = z.object({
   password: z.string().min(1, "পাসওয়ার্ড দিন"),
 });
 
+/**
+ * An FCM registration token is an opaque, long-ish string. The bounds here only
+ * reject obvious garbage before it reaches the database.
+ */
+export const deviceRegisterSchema = z.object({
+  token: z
+    .string({ required_error: "ডিভাইস টোকেন দিন" })
+    .trim()
+    .min(20, "ডিভাইস টোকেন সঠিক নয়")
+    .max(4096, "ডিভাইস টোকেন অনেক বড়"),
+  platform: z.enum(["ANDROID", "IOS"]).optional().default("ANDROID"),
+  label: z.string().trim().max(60).optional().or(z.literal("")),
+});
+
+export type DeviceRegisterInput = z.infer<typeof deviceRegisterSchema>;
+
 export const adminOrderSchema = z.object({
   customerName: nameField,
   phone: phoneField,

@@ -64,7 +64,7 @@ const inquiryColumns: CsvColumn<InquiryRow>[] = [
  * Streams a UTF-8 (BOM) CSV that opens correctly in Excel with Bengali text.
  */
 export async function GET(request: NextRequest) {
-  const denied = await guardAdmin();
+  const denied = await guardAdmin(request);
   if (denied) return denied;
 
   const type = request.nextUrl.searchParams.get("type") ?? "orders";

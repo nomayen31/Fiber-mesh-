@@ -7,6 +7,10 @@ Built with **Next.js 15 (App Router) + TypeScript + Tailwind CSS + Prisma + Post
 mobile-first, fully in Bengali, with a password-protected admin area for orders, analytics and
 CSV export.
 
+Ships with a companion **Android lead-notification app** (`apps/lead-notify/`, Expo/React Native)
+that mirrors the dashboard and sends a push notification to the shop phone the moment a new order
+or customer message arrives — in the foreground, in the background, or with the app closed.
+
 ---
 
 ## What's included
@@ -63,6 +67,59 @@ dashboard.
 * **CSV export** — orders or inquiries, UTF-8 **BOM** prefixed so Bengali renders correctly in
   Excel.
 
+### Android lead-notification app (`apps/lead-notify/`)
+
+A private Android app for the shop phone: the same dashboard in your pocket, plus a push
+notification the moment a new order or message arrives.
+
+* **Push on every new lead** — delivered whether the app is open, backgrounded or fully closed.
+  Tapping the notification opens that exact order.
+* **Same login** — the same admin password, and the same signed JWT as the website (presented as a
+  bearer token instead of a cookie).
+* **Overview** — the same stat tiles and revenue/order charts as the web dashboard, with a
+  7 / 30 / 90 day range switch.
+* **Orders** — search, status filters, infinite scroll, and status changes.
+* **Order detail** — full customer and pricing breakdown, one-tap **call** / **WhatsApp** / **copy
+  phone number**, and a status changer.
+* **Messages** — customer inquiries with read/unread, marking read as you open them.
+* **Settings** — whether *this phone* is registered for push, whether the *server* has its Firebase
+  credentials, which phones are registered, and logout (which stops the pushes).
+* Built with Expo SDK 58 / React Native, distributed as a sideloadable **APK** (not on the Play
+  Store), and styled with the same brand colours and Bengali-only typography rules as the website.
+
+See [`docs/MOBILE_APP_SETUP.md`](docs/MOBILE_APP_SETUP.md) and
+[`docs/APK_BUILD_AND_INSTALL.md`](docs/APK_BUILD_AND_INSTALL.md).
+
+### Push notifications (backend)
+
+* An **outbox** pattern: a `NotificationJob` row is committed in the same request that saves the
+  order, so a saved order can never lose its notification because a send failed.
+* **Idempotent** — one row per `(event, entity)`, enforced by a unique index, so re-processing can
+  never produce a second buzz.
+* **Per-device de-duplication** — a device that already received a job is never sent to twice.
+* **Retry** on transport failure, and **automatic deactivation** of dead FCM tokens.
+* **No customer PII in a push** — only the order number, product, quantity and total. Name, phone
+  and address are fetched from the authenticated API after a tap, because a notification is
+  rendered on a locked screen.
+* **Degrades quietly** — with no Firebase credentials the website, dashboard and app all work
+  normally; deliveries are just recorded as `SKIPPED`.
+
+See [`docs/API_INTEGRATION.md`](docs/API_INTEGRATION.md) and
+[`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md).
+
+---
+
+## Documentation
+
+| Document | Contents |
+| --- | --- |
+| [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) | Audit of the existing codebase, the phased plan, risks, external dependencies |
+| [`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md) | The two Firebase pieces (client config + admin key), verification, troubleshooting |
+| [`docs/MOBILE_APP_SETUP.md`](docs/MOBILE_APP_SETUP.md) | Running the app locally, project structure, Bengali typography rule |
+| [`docs/API_INTEGRATION.md`](docs/API_INTEGRATION.md) | Every endpoint, auth, push payloads, delivery guarantees, env vars |
+| [`docs/APK_BUILD_AND_INSTALL.md`](docs/APK_BUILD_AND_INSTALL.md) | Building the APK with EAS, installing it, rebuilding |
+| [`docs/TESTING_CHECKLIST.md`](docs/TESTING_CHECKLIST.md) | Automated results + the manual steps only a real phone can verify |
+
 ---
 
 ## Tech stack
@@ -79,6 +136,8 @@ dashboard.
 | ORM | Prisma 6 (`@prisma/client`) |
 | Auth | jose (HS256 JWT in httpOnly cookie) + Next middleware |
 | Validation | zod on every write endpoint |
+| Push | firebase-admin (FCM) + a Postgres outbox |
+| Mobile app | Expo SDK 58 / React Native 0.88, expo-router, expo-notifications, expo-secure-store |
 
 ---
 
@@ -119,6 +178,17 @@ npm start
 | `NEXT_PUBLIC_BUSINESS_HOURS` | – | Opening hours line. |
 | `NEXT_PUBLIC_FIREBASE_*` | – | Firebase Analytics web config (7 vars, see below). Leave unset to disable analytics. |
 | `NEON_BRANCH` | – | Written by the Neon CLI; informational. |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | – | Full Firebase service-account JSON (raw or base64) for push. **Server-only.** Preferred over the three below. |
+| `FIREBASE_PROJECT_ID` | – | Service-account alternative; all three required if the blob above is unset. |
+| `FIREBASE_CLIENT_EMAIL` | – | Ditto. |
+| `FIREBASE_PRIVATE_KEY` | – | Ditto. Keeps its literal `\n` sequences; the code converts them. |
+| `NOTIFY_EVENTS` | – | Which events push, comma separated. Default `order.created,inquiry.created`. `none` is a kill switch. |
+| `CRON_SECRET` | – | Enables `GET/POST /api/cron/notifications` (outbox retry). Unset ⇒ that route returns 503, never open. |
+| `MOBILE_SESSION_MAX_AGE_SECONDS` | – | Android app token lifetime in seconds. Default 30 days, capped at 90. |
+
+Every push variable is optional: with none of them set, the site, the dashboard and the app all work
+normally and deliveries are simply recorded as `SKIPPED`. See
+[docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
 
 Generate a production secret with:
 
@@ -179,7 +249,10 @@ docker compose up -d
 | `SpecItem` | label/value rows belonging to a product, ordered by `sortOrder` |
 | `Order` | `orderNo` (unique, `FM-YYYYMMDD-NNNN`), customer, phone, **district**, address, product ref, quantity, unitPrice, subtotal, discount, delivery, total, status, source, note, timestamps |
 | `Inquiry` | contact-form submission with `isRead` flag |
-| enums | `OrderStatus` (PENDING, CONFIRMED, PROCESSING, SHIPPED, COMPLETED, CANCELLED), `OrderSource` (WEBSITE, PHONE, MANUAL) |
+| `DeviceToken` | one row per registered phone: unique `token`, `adminId`, `platform`, `label`, `isActive`, `lastSeenAt` |
+| `NotificationJob` | one row per notification event: unique `eventKey` (`"<eventType>:<entityId>"`), `title`, `body`, `payload`, `status`, `attempts`, `sentCount`, `failedCount`, `lastError` |
+| `NotificationDelivery` | one row per (job, device): `status`, `error`, `messageId`; unique on `[jobId, deviceTokenId]` |
+| enums | `OrderStatus` (PENDING, CONFIRMED, PROCESSING, SHIPPED, COMPLETED, CANCELLED), `OrderSource` (WEBSITE, PHONE, MANUAL), `DevicePlatform` (ANDROID, IOS), `DeliveryStatus` (PENDING, SENT, FAILED, SKIPPED) |
 
 ### Delivery districts
 
@@ -206,6 +279,8 @@ Bengali via `districtLabel()`. Change a delivery time in one place and all of th
 | `npm run db:seed` | Upsert the 4-product catalogue from `src/content/products.ts`. Idempotent. |
 | `npm run db:studio` | Prisma Studio. |
 | `npm run db:reset` | Drop, re-migrate and re-seed. **Destructive.** |
+| `npm test` | Unit tests for the notification pipeline (no DB, no network). |
+| `npm run test:integration` | DB-backed notification checks against the real database. Self-cleaning. |
 
 Products are read from the database, but if the table is empty or unreachable the site falls back
 to the static catalogue in `src/content/products.ts`, so the page never renders blank.
@@ -312,8 +387,21 @@ src/
     orders.ts   order creation/numbering/listing
     stats.ts    dashboard aggregations (Asia/Dhaka aware)
     csv.ts      BOM-prefixed CSV builder
+    notifications/    push pipeline: config, payload, firebase-admin, sender,
+                      store, dispatch, schedule
     auth.ts / session.ts / validators.ts / api.ts / utils.ts / types.ts
   middleware.ts              edge guard for /admin and /api/admin
+
+apps/lead-notify/            standalone Expo/React Native Android app.
+                             Own package.json + node_modules; excluded from the
+                             root tsconfig and from Vercel uploads.
+docs/                        FIREBASE_SETUP, MOBILE_APP_SETUP, API_INTEGRATION,
+                             APK_BUILD_AND_INSTALL, TESTING_CHECKLIST,
+                             IMPLEMENTATION_PLAN
+tests/
+  notifications.test.ts        unit tests            → npm test
+  integration.notifications.ts DB-backed checks      → npm run test:integration
+  helpers/                     in-memory store + stub sender
 ```
 
 ### Editing content
@@ -366,20 +454,38 @@ Notes:
 | `POST` | `/api/orders` | `customerName, phone, district, address, productSlug, quantity, note?` | `200` + order, `422` + field errors |
 | `POST` | `/api/inquiries` | `name, phone, email?, subject?, message` | `200` |
 
-### Admin (require the session cookie)
+### Admin (session cookie **or** `Authorization: Bearer` from the Android app)
 
 | Method | Route | Notes |
 | --- | --- | --- |
-| `POST` | `/api/admin/login` | `{ password }` → sets cookie |
+| `POST` | `/api/admin/login` | `{ password }` → sets cookie (website) |
+| `POST` | `/api/admin/mobile/login` | `{ password }` → returns `{ token, tokenType, expiresIn }` (app) |
 | `POST` | `/api/admin/logout` | clears cookie |
 | `GET` | `/api/admin/session` | current auth state |
 | `GET` | `/api/admin/stats?range=7d\|30d\|90d` | cards, series, breakdowns, top products |
-| `GET` | `/api/admin/orders?q=&status=&page=&pageSize=` | paginated list + filtered revenue |
+| `GET` | `/api/admin/orders?q=&status=&source=&page=&pageSize=` | paginated list + filtered revenue |
 | `POST` | `/api/admin/orders` | manual order (any `OrderSource`) |
+| `GET` | `/api/admin/orders/:id` | one order (added for the app's detail screen) |
 | `PATCH` | `/api/admin/orders/:id` | `{ status }` |
-| `GET` | `/api/admin/inquiries?page=&pageSize=` | list |
+| `DELETE` | `/api/admin/orders/:id` | delete |
+| `GET` | `/api/admin/inquiries?page=&pageSize=&q=&unread=1` | list |
 | `PATCH` | `/api/admin/inquiries/:id` | `{ isRead }` |
 | `GET` | `/api/admin/export?type=orders\|inquiries` | UTF-8 BOM CSV download |
+| `GET` | `/api/admin/devices` | registered phones + `pushConfigured` + `missingServerKeys` |
+| `POST` | `/api/admin/devices` | `{ token, platform, label? }` — register/refresh this phone |
+| `DELETE` | `/api/admin/devices?id=\|?token=` | deactivate this phone's registration |
+
+An `Authorization` header, when present, is authoritative: an invalid bearer is rejected with `401`
+and never silently falls back to the cookie session.
+
+### Ops
+
+| Method | Route | Notes |
+| --- | --- | --- |
+| `GET` \| `POST` | `/api/cron/notifications?limit=1..100` | Retries undelivered pushes. Requires `CRON_SECRET` (bearer **or** `?secret=`); returns `503` when unset, so it is never an open "notify everyone" button. |
+
+The normal delivery path is inline, right after the order is saved — this endpoint is opt-in for the
+case where a serverless function was frozen before delivery finished.
 
 ---
 
@@ -396,6 +502,13 @@ This project is deployed to Vercel as **`fiber-mesh`** with the GitHub repositor
   `AUTH_SECRET`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_PHONE`, `NEXT_PUBLIC_PHONE_DISPLAY`,
   `NEXT_PUBLIC_WHATSAPP`, `NEXT_PUBLIC_ADDRESS`, `NEXT_PUBLIC_FACEBOOK`,
   `NEXT_PUBLIC_BUSINESS_HOURS`, plus the seven `NEXT_PUBLIC_FIREBASE_*` Analytics values.
+* For Android push, also set `FIREBASE_SERVICE_ACCOUNT_JSON` (and optionally `NOTIFY_EVENTS`,
+  `CRON_SECRET`, `MOBILE_SESSION_MAX_AGE_SECONDS`), then redeploy. Without it everything still
+  works — push is simply disabled and the app says so. See
+  [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
+* The Android app is **not** built by Vercel. `apps/` is excluded from the deployment entirely via
+  `.vercelignore`. Its APK is built separately with EAS — see
+  [docs/APK_BUILD_AND_INSTALL.md](docs/APK_BUILD_AND_INSTALL.md).
 
 Deploy from the CLI:
 
@@ -437,6 +550,16 @@ npm start          # PORT=3000 by default
 * Prices, discounts and totals are always recomputed on the server.
 * All write endpoints validate with zod and return Bengali field-level errors.
 * A honeypot field silently absorbs bot submissions.
+* The Android app uses the **same** HS256 JWT, presented as an `Authorization: Bearer` token
+  instead of a cookie, and stores it in the Android Keystore via `expo-secure-store`. When an
+  `Authorization` header is present it is authoritative — an invalid bearer returns `401` and never
+  falls back to the cookie session.
+* The Firebase Admin service account is server-only. It is read exclusively by
+  `src/lib/notifications/firebase-admin.ts`, which throws if it is ever evaluated in a browser
+  bundle, and the API only ever reports *which variable names are missing* — never a value.
+* Push payloads contain **no customer PII**: just the order number, product, quantity and total.
+  A notification is visible on a locked screen, so it is treated as public. Name, phone and address
+  are fetched from the authenticated API after a tap.
 * **Change `ADMIN_PASSWORD` and `AUTH_SECRET` before going live.**
 
 ---
@@ -450,22 +573,29 @@ npm start          # PORT=3000 by default
 | Bengali shows as mojibake in Excel | Open the exported CSV via Excel's *Data → From Text/CSV* with UTF-8 selected, or use Google Sheets. The file already carries a UTF-8 BOM. |
 | Admin login loops back to `/admin/login` | `AUTH_SECRET` changed since the cookie was issued, or the cookie was blocked. Clear cookies and sign in again. |
 | Site shows products you deleted from the DB | The static catalogue in `src/content/products.ts` is the fallback; re-check that the `Product` table actually has rows. |
+| The app registers but no notification ever arrives | Check the app's **সেটিংস** tab first — it names the problem. Usually either `FIREBASE_SERVICE_ACCOUNT_JSON` is unset (`pushConfigured: false`), `NOTIFY_EVENTS=none`, or the notification type is switched off. |
+| The **APK** build fails with a missing-file error | `apps/lead-notify/google-services.json` is required **at build time**. See [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md) Part A. |
+| Push works when the app is open but not when it is closed | The APK was built without the Firebase SDK — `google-services.json` must exist when EAS builds, not just when you run the app. |
 
 ---
 
 ## Sample data
 
-The end-to-end test run left **2 sample orders and 1 inquiry** in the linked Neon branch (both
-orders are tagged with `E2E` in their note field) so the dashboard isn't empty on first login.
-Delete them whenever you like — quickest via Prisma Studio:
+The database currently holds the **2 real products** and **1 real customer order**
+(`FM-20261018-0001`, placed through the live site while testing). **Do not delete
+that order** — it is a genuine record, not test data.
+
+The notification integration tests create their own marker-scoped rows
+(`NOTIFYTEST-…`) and delete exactly what they created, so they never touch real
+data. Both suites are safe to run at any time:
 
 ```bash
-npm run db:studio        # open the Order / Inquiry tables and delete the rows
+npm test                 # 26 unit tests, no database involved
+npm run test:integration # 24 checks against the real database, self-cleaning
 ```
 
-or in SQL:
+Inspect the tables directly with:
 
-```sql
-delete from "Order"   where note    like '%E2E%';
-delete from "Inquiry" where message like '%E2E%';
+```bash
+npm run db:studio        # open the Order / Inquiry tables
 ```

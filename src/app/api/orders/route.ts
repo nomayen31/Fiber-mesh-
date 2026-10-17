@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 import { getClientIp, jsonError, jsonOk, rateLimit } from "@/lib/api";
 import { createWebsiteOrder } from "@/lib/orders";
+import { queueOrderNotification } from "@/lib/notifications/dispatch";
+import { scheduleDispatch } from "@/lib/notifications/schedule";
 import { fieldErrors, orderCreateSchema } from "@/lib/validators";
 
 export const runtime = "nodejs";
@@ -43,6 +45,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const order = await createWebsiteOrder(parsed.data);
+
+    // The order is committed. Queueing the push is best-effort: the outbox row
+    // is written inside this request so it cannot be lost, and delivery runs
+    // after the response. A notification problem must never turn a saved order
+    // into an error for the customer, so the response below is unchanged.
+    const jobId = await queueOrderNotification(order, "order.created");
+    scheduleDispatch(jobId);
+
     return jsonOk({
       ok: true,
       order: {

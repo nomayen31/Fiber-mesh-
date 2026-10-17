@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /** GET /api/admin/stats?range=7d|30d|90d */
 export async function GET(request: NextRequest) {
-  const denied = await guardAdmin();
+  const denied = await guardAdmin(request);
   if (denied) return denied;
 
   const rangeParam = request.nextUrl.searchParams.get("range") ?? "7d";

@@ -8,6 +8,41 @@ import { jwtVerify, SignJWT } from "jose";
 export const ADMIN_COOKIE = "fm_admin_session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 8; // 8 hours
 
+/**
+ * The Android app cannot rely on an `httpOnly` cookie, so it holds the very same
+ * signed JWT and presents it as `Authorization: Bearer <token>`.
+ *
+ * A phone that is carried around needs to stay signed in, so the mobile token
+ * lives longer than the browser one. That is a deliberate trade-off — a stolen
+ * phone yields a longer-lived token — and it is bounded and tunable:
+ * `MOBILE_SESSION_MAX_AGE_SECONDS` (default 30 days, hard-capped at 90 days).
+ * Logging out of the app deletes the stored token and unregisters the device.
+ */
+export const MOBILE_SESSION_MAX_AGE_SECONDS = (() => {
+  const parsed = Number.parseInt(
+    process.env.MOBILE_SESSION_MAX_AGE_SECONDS ?? "",
+    10,
+  );
+  const oneHour = 60 * 60;
+  const ninetyDays = 90 * 24 * oneHour;
+  if (Number.isFinite(parsed) && parsed >= oneHour && parsed <= ninetyDays) {
+    return parsed;
+  }
+  return 30 * 24 * oneHour;
+})();
+
+/**
+ * Pull a bearer token out of an `Authorization` header.
+ * Returns `null` for any other scheme (Basic, etc.).
+ */
+export function bearerTokenFrom(
+  header: string | null | undefined,
+): string | null {
+  if (!header) return null;
+  const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
+  return match?.[1] ?? null;
+}
+
 function getSecretKey(): Uint8Array {
   const secret =
     process.env.AUTH_SECRET ??
@@ -29,12 +64,14 @@ export type AdminSession = {
 };
 
 /** Create a signed JWT for the admin dashboard session. */
-export async function createAdminToken(): Promise<string> {
+export async function createAdminToken(
+  maxAgeSeconds: number = SESSION_MAX_AGE_SECONDS,
+): Promise<string> {
   return new SignJWT({ role: "admin" })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject("admin")
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_MAX_AGE_SECONDS}s`)
+    .setExpirationTime(`${maxAgeSeconds}s`)
     .sign(getSecretKey());
 }
 

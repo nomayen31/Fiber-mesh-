@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { getAdminSession } from "@/lib/auth";
+import { getAdminSession, getAdminSessionFromRequest } from "@/lib/auth";
 
 /** Small in-memory rate limiter (per process). Enough for form spam control. */
 const buckets = new Map<string, number[]>();
@@ -60,10 +60,17 @@ export function jsonError(
 
 /**
  * Guard for `/api/admin/*` handlers. Returns a 401 response when the caller
- * has no valid session cookie, otherwise null (meaning "carry on").
+ * has no valid session, otherwise null (meaning "carry on").
+ *
+ * Pass the request to accept `Authorization: Bearer <token>` (native clients) in
+ * addition to the browser session cookie. Handlers that omit it are cookie-only.
  */
-export async function guardAdmin(): Promise<NextResponse | null> {
-  const session = await getAdminSession();
+export async function guardAdmin(
+  request?: NextRequest,
+): Promise<NextResponse | null> {
+  const session = request
+    ? await getAdminSessionFromRequest(request)
+    : await getAdminSession();
   if (!session) {
     return jsonError("Unauthorized. অ্যাডমিন লগইন প্রয়োজন।", 401);
   }

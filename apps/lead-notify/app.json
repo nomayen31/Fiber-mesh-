@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Fiber Mesh Lead",
+    "slug": "fiber-mesh-lead",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "fibermeshlead",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#f1f5f9",
+    "primaryColor": "#2574eb",
+    "android": {
+      "package": "com.fibermesh.leadnotify",
+      "versionCode": 1,
+      "userInterfaceStyle": "light",
+      "predictiveBackGestureEnabled": false,
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE",
+        "android.permission.INTERNET"
+      ],
+      "googleServicesFile": "./google-services.json"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#2574eb",
+          "defaultChannel": "orders_high"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#2574eb",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
