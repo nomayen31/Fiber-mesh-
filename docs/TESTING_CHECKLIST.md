@@ -73,6 +73,48 @@ store and schema:
 | `npx expo-doctor` | `apps/lead-notify/` | **20/20 checks pass** |
 | `npx expo config --type public` | `apps/lead-notify/` | resolves cleanly |
 
+### Production smoke test (opt-in, hits the live deployment)
+
+```powershell
+npm run verify:push
+```
+
+`scripts/verify-push.mjs` checks the **deployed** backend over the network against
+the real database — the parts unit and integration tests cannot reach. It waits
+for the new routes to go live, then verifies:
+
+- the app login issues a Bearer JWT, and a wrong password is `401`
+- the app login sets **no cookie**
+- an **invalid bearer is `401`** and never silently falls back to a cookie session
+- the browser cookie session still works (the bearer change did not break it)
+- `GET /api/admin/devices` reports push state as a boolean, lists missing keys as
+  **names only**, and defaults to `order.created` + `inquiry.created`
+- device registration returns a **masked preview** and never the full token
+- deactivation (the logout path) flips `isActive` to `false` rather than deleting
+- placing a real order commits **exactly one** `NotificationJob`, keyed
+  `order.created:<orderId>`
+- **no customer name, phone or address appears** anywhere in the job's title,
+  body or payload
+- the job settles out of `PENDING` rather than hanging
+- with no Firebase credentials it degrades to `SKIPPED`, never `FAILED`
+- `GET /api/admin/orders/:id` returns the order, with the same ISO date shape as
+  the list endpoint, and `404` (not `500`) for a missing one
+- the public order response does **not** leak the internal id
+- `/api/cron/notifications` refuses an unauthenticated call
+- the genuine customer order is still present
+
+It is self-cleaning: the test order is deleted through the admin API (which
+cascades its job), the test device row is removed, and it fails loudly if
+anything is left behind.
+
+> Point it at a deployment deliberately — it is never part of `npm test`. When
+> targeting a deployed environment, `ADMIN_PASSWORD` must be **that
+> deployment's** password, not your local `.env` value:
+>
+> ```powershell
+> $env:ADMIN_PASSWORD = "the-deployment-password"; npm run verify:push
+> ```
+
 ### Regression checks (nothing existing was broken)
 
 - `GET /api/admin/orders/:id` is **new**; `PATCH` and `DELETE` on that path are

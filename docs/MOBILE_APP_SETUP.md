@@ -74,6 +74,8 @@ apps/lead-notify/
 ├─ .env.example             EXPO_PUBLIC_* template
 ├─ google-services.json     ← you add this (git-ignored). See FIREBASE_SETUP.md
 ├─ assets/images/           Icon, splash, adaptive-icon layers
+├─ scripts/
+│  └─ generate-icons.mjs    regenerates those icons from code
 └─ src/
    ├─ app/                  ← every file here is a route (expo-router)
    │  ├─ _layout.tsx        root: providers + the auth guard
@@ -194,3 +196,25 @@ installed SDK; `npm install` picks the latest and will eventually break the buil
   peer dependencies and are not used directly.
 - No custom font is bundled. Android ships **Noto Sans Bengali**, so Bengali text
   renders correctly with no extra asset — which also keeps the APK smaller.
+
+### The app icons are generated, not hand-drawn
+
+`assets/images/*.png` is produced by `scripts/generate-icons.mjs`:
+
+```powershell
+node scripts/generate-icons.mjs
+```
+
+It draws the product itself — a diamond lattice, which is what fiberglass
+construction mesh is — in the site's brand blue, and writes all six files the
+config references (legacy icon, the three adaptive-icon layers, splash, favicon).
+It uses only Node's built-in `zlib`, so no image library was added for six static
+files. Re-run it only when the design changes; the PNGs it writes are committed.
+
+Two things worth knowing if you edit the design:
+
+- The mark is kept inside the **central 62 %** of the adaptive-icon canvas, since
+  a launcher masks that layer to a circle or squircle and can crop up to a third
+  of it.
+- The lattice is deliberately coarse. A denser weave looks better at 1024 px and
+  turns to mush once the launcher downsamples the icon to 48 dp.

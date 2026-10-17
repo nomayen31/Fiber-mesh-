@@ -281,6 +281,7 @@ Bengali via `districtLabel()`. Change a delivery time in one place and all of th
 | `npm run db:reset` | Drop, re-migrate and re-seed. **Destructive.** |
 | `npm test` | Unit tests for the notification pipeline (no DB, no network). |
 | `npm run test:integration` | DB-backed notification checks against the real database. Self-cleaning. |
+| `npm run verify:push` | Production smoke test of the push endpoints over the network. Creates and removes its own rows. Optional — never run by `npm test`. |
 
 Products are read from the database, but if the table is empty or unreachable the site falls back
 to the static catalogue in `src/content/products.ts`, so the page never renders blank.
