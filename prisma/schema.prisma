@@ -1,0 +1,106 @@
+// ---------------------------------------------------------------------------
+// Prisma schema - Fiber Mesh (PostgreSQL)
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (PgBouncer) — used by the running application.
+  url       = env("DATABASE_URL")
+  // Direct connection — used by Prisma Migrate / Studio, which need session
+  // state that PgBouncer's transaction pooling does not provide.
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  COMPLETED
+  CANCELLED
+}
+enum OrderSource {
+  WEBSITE
+  MANUAL
+  PHONE
+}
+
+model Product {
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  name        String
+  nameEn      String?
+  tagline     String?
+  description String
+  gsm         Int?
+  price       Int // price per roll in BDT
+  unit        String     @default("রোল")
+  badge       String?
+  imageUrl    String?
+  isActive    Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  specs       SpecItem[]
+  orders      Order[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+model SpecItem {
+  id        String  @id @default(cuid())
+  label     String
+  value     String
+  sortOrder Int     @default(0)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  orderNo      String      @unique
+  customerName String
+  phone        String
+  address      String?
+  /** District (English value from src/content/districts.ts), e.g. "Feni". */
+  district     String?
+  productId    String?
+  product      Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName  String // snapshot, survives product edits/deletes
+  unitPrice    Int
+  quantity     Int
+  subtotal     Int
+  discount     Int         @default(0)
+  total        Int
+  status       OrderStatus @default(PENDING)
+  source       OrderSource @default(WEBSITE)
+  note         String?
+  createdBy    String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([source])
+  @@index([district])
+}
+
+model Inquiry {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String
+  email     String?
+  subject   String?
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([isRead])
+}

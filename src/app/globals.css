@@ -1,0 +1,145 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply overflow-x-hidden bg-white text-slate-800 antialiased;
+    /* Bengali script needs a little more breathing room than Latin. */
+    line-height: 1.75;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  }
+
+  /**
+   * IMPORTANT: Bengali must never be letter-spaced or upper-cased.
+   * Letter-spacing pulls conjuncts and vowel signs apart (মে শ → ম ে শ),
+   * so the text looks broken. Latin-only labels opt back in with a
+   * `tracking-*` utility where needed.
+   */
+  :lang(bn) {
+    letter-spacing: normal;
+    text-transform: none;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-semibold text-slate-900;
+    line-height: 1.45;
+  }
+
+  /* Keep anchors clear of the sticky header. */
+  section[id] {
+    scroll-margin-top: 90px;
+  }
+
+  ::selection {
+    background: #bfe1fe;
+  }
+
+  :focus-visible {
+    outline: 2px solid #2574eb;
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .container-x {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .card {
+    @apply rounded-2xl border border-slate-200/90 bg-white shadow-card;
+  }
+
+  .card-interactive {
+    @apply card transition duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-card-hover;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-slate-700;
+  }
+
+  /* 16px on mobile: anything smaller makes iOS Safari zoom into the field. */
+  .input {
+    @apply w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 text-base text-slate-900
+      placeholder:text-slate-400
+      focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10
+      disabled:cursor-not-allowed disabled:bg-slate-50;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-[15px] font-semibold
+      transition duration-200 active:scale-[0.98]
+      focus:outline-none focus-visible:ring-4 disabled:pointer-events-none disabled:opacity-60;
+  }
+
+  .btn-primary {
+    @apply btn bg-brand-600 text-white shadow-sm shadow-brand-600/20 hover:bg-brand-700 hover:shadow-md;
+  }
+
+  .btn-accent {
+    @apply btn bg-accent-500 text-white shadow-md shadow-accent-500/25 hover:bg-accent-600 hover:shadow-lg hover:shadow-accent-600/25;
+  }
+
+  .btn-outline {
+    @apply btn border border-slate-200 bg-white text-slate-800 shadow-sm hover:border-brand-300 hover:bg-brand-50/60;
+  }
+
+  .btn-ghost {
+    @apply btn text-slate-700 hover:bg-slate-100;
+  }
+
+  /* Small pill used for trust items, tags and section eyebrows. */
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-semibold;
+  }
+
+  .mesh-surface {
+    background-color: #f8fafc;
+    background-image:
+      repeating-linear-gradient(45deg, rgb(37 116 235 / 0.08) 0 1.5px, transparent 1.5px 11px),
+      repeating-linear-gradient(-45deg, rgb(37 116 235 / 0.08) 0 1.5px, transparent 1.5px 11px);
+  }
+
+  .prose-bn p + p {
+    @apply mt-4;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

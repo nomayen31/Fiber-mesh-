@@ -1,0 +1,24 @@
+# Local PostgreSQL for development.
+#   docker compose up -d
+#   npm run setup
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: fibermesh-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fibermesh
+      POSTGRES_PASSWORD: fibermesh
+      POSTGRES_DB: fibermesh
+    ports:
+      - "5432:5432"
+    volumes:
+      - fibermesh_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fibermesh -d fibermesh"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  fibermesh_pgdata:

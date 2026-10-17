@@ -1,0 +1,16 @@
+# Normalise line endings so the repo behaves the same on Windows, macOS and
+# on Vercel's Linux builders.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending converted.
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary
+*.gif binary
+*.mp4 binary
+*.ico binary
+
+# Generated / vendored files are excluded from diffs and language stats.
+package-lock.json linguist-generated=true
+prisma/migrations/** linguist-generated=true
