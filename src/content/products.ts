@@ -2,7 +2,7 @@
  * Single source of truth for the product catalogue.
  *
  * - `prisma/seed.ts` writes these rows into PostgreSQL.
- * - `src/lib/products.ts` uses them as a safe fallback if the database is
+ * - `src/lib/catalog.ts` uses them as a safe fallback if the database is
  *   temporarily unreachable, so the landing page never breaks.
  *
  * Edit prices / specs here and re-run `npm run db:seed` to update the database.
@@ -16,109 +16,80 @@ export type SeedProduct = {
   nameEn: string;
   tagline: string;
   description: string;
-  gsm: number;
+  /** Optional mesh weight in grams/m². Not used by the current roll sizes. */
+  gsm?: number;
   price: number; // BDT per roll
   unit: string;
   badge?: string;
-  imageUrl?: string;
+  /** Every photo of this product — rendered as a carousel. First one is primary. */
+  images: string[];
   sortOrder: number;
   specs: SeedSpec[];
 };
 
 export const seedProducts: SeedProduct[] = [
   {
-    slug: "fiberglass-mesh-45-gsm",
-    name: "ফাইবারগ্লাস মেশ ৪৫ GSM",
-    nameEn: "Fiberglass Mesh 45 GSM",
-    tagline: "সাধারণ প্লাস্টার ও ঘরের ভেতরের দেয়ালের জন্য অর্থসাশ্রয়ী সমাধান",
+    slug: "fiberglass-mesh-big-roll",
+    name: "বিগ রোল (Big Roll) — ৫০ × ১ মিটার",
+    nameEn: "Fiberglass Mesh Big Roll — 50 × 1 m",
+    tagline:
+      "বড় দেয়াল, ছাদ ও পুরো ঘরের কাজের জন্য। এক রোলেই ৫১৫ স্কয়ার ফিট কভারেজ।",
     description:
-      "৪৫ GSM ফাইবারগ্লাস মেশ ঘরের ভেতরের প্লাস্টার, হালকা জোড়া ও চুল-ফাটল প্রতিরোধে সবচেয়ে বেশি ব্যবহৃত হয়। কম ওজন হওয়ায় এটি সহজে কাটা যায় এবং প্লাস্টারের ভেতরে ভালোভাবে বসে।",
-    gsm: 45,
-    price: 1250,
+      "বিগ রোলের প্রস্থ ১ মিটার, তাই বড় দেয়াল, ছাদের প্লাস্টার, স্ল্যাব ও কনস্ট্রাকশনের ভারী কাজে এটি সবচেয়ে সুবিধাজনক। ৫০ মিটার লম্বা রোল থেকে এক টানেই চওড়া পৃষ্ঠে মেশ বিছিয়ে দেওয়া যায়—জোড়া কম হয়, কাজও দ্রুত এগোয়। যারা পুরো বিল্ডিং বা বড় প্রজেক্টে কাজ করেন, তাদের জন্য এটি সবচেয়ে সাশ্রয়ী প্যাক।",
+    price: 7500,
     unit: "রোল",
-    imageUrl: "/assets/product-45gsm.jpg",
+    badge: "সবচেয়ে বেশি বিক্রি",
+    images: [
+      "/assets/big-roll-1.jpg",
+      "/assets/big-roll-2.jpg",
+      "/assets/big-roll-3.jpg",
+      "/assets/big-roll-4.jpg",
+      "/assets/big-roll-5.jpg",
+    ],
     sortOrder: 1,
     specs: [
-      { label: "ওজন (GSM)", value: "৪৫ গ্রাম/বর্গমিটার" },
-      { label: "জালিকার ছিদ্র", value: "৪ × ৪ মিমি" },
-      { label: "প্রস্থ", value: "১ মিটার" },
-      { label: "দৈর্ঘ্য", value: "৫০ মিটার / রোল" },
-      { label: "কভারেজ", value: "প্রায় ৫০ বর্গমিটার (৫০০ বর্গফুট)" },
-      { label: "উপাদান", value: "ক্ষার-প্রতিরোধী কাচতন্তু জালিকা" },
+      { label: "সাইজ", value: "৫০ × ১ মিটার" },
+      { label: "ফিটে", value: "১৬০.৫ × ৩.২১ ফুট" },
+      { label: "মোট এরিয়া", value: "৫১৫ স্কয়ার ফিট" },
+      { label: "প্রস্থ", value: "১ মিটার (৩.২১ ফুট)" },
+      { label: "দৈর্ঘ্য", value: "৫০ মিটার (১৬০.৫ ফুট)" },
+      { label: "উপাদান", value: "ক্ষার-প্রতিরোধী ফাইবারগ্লাস জালিকা" },
       { label: "রঙ", value: "সাদা" },
-      { label: "ব্যবহার", value: "ভেতরের প্লাস্টার, হালকা জোড়া, ফাটল মেরামত" },
+      {
+        label: "ব্যবহার",
+        value: "বাইরের দেয়াল, ছাদের প্লাস্টার, স্ল্যাব, বড় জোড়া, পুরো ঘরের কাজ",
+      },
     ],
   },
   {
-    slug: "fiberglass-mesh-60-gsm",
-    name: "ফাইবারগ্লাস মেশ ৬০ GSM",
-    nameEn: "Fiberglass Mesh 60 GSM",
-    tagline: "জোড়া ও বাইরের দেয়ালের জন্য সবচেয়ে জনপ্রিয় মডেল",
+    slug: "fiberglass-mesh-small-roll",
+    name: "স্মল রোল (Small Roll) — ৫০ × ০.৩৩ মিটার",
+    nameEn: "Fiberglass Mesh Small Roll — 50 × 0.33 m",
+    tagline:
+      "জোড়া, জানালার কোণা ও ফাটল মেরামতের জন্য। ছোট কাজে কম খরচে ১৭৪ স্কয়ার ফিট।",
     description:
-      "৬০ GSM মেশ জোড়া মজবুতকরণ এবং বাইরের দেয়ালের প্লাস্টারে দুর্দান্ত পারফর্ম করে। ভেতরের ও বাইরের—দুই কাজেই ব্যবহার করা যায়, তাই ঠিকাদারদের কাছে এটি সবচেয়ে চাহিদাসম্পন্ন মডেল।",
-    gsm: 60,
-    price: 1650,
+      "স্মল রোলের প্রস্থ ০.৩৩ মিটার (প্রায় ১ ফুট), তাই জোড়া, জানালা-দরজার কোণা, কলাম ও ফাটল মেরামতের কাজে এটি ব্যবহার করা সহজ। যেখানে পুরো দেয়ালে মেশ লাগবে না, শুধু ফাটলের ঝুঁকিপূর্ণ অংশ সুরক্ষিত করতে হবে—সেখানেই স্মল রোল সবচেয়ে কম খরচে সঠিক সমাধান। মিস্ত্রিরা একা হাতেই সহজে কেটে লাগাতে পারেন।",
+    price: 2500,
     unit: "রোল",
-    imageUrl: "/assets/product-60gsm.jpg",
-    badge: "সবচেয়ে জনপ্রিয়",
+    badge: "কম খরচে শুরু",
+    images: [
+      "/assets/small-roll-1.jpg",
+      "/assets/small-roll-2.jpg",
+      "/assets/small-roll-3.jpg",
+    ],
     sortOrder: 2,
     specs: [
-      { label: "ওজন (GSM)", value: "৬০ গ্রাম/বর্গমিটার" },
-      { label: "জালিকার ছিদ্র", value: "৫ × ৫ মিমি" },
-      { label: "প্রস্থ", value: "১ মিটার" },
-      { label: "দৈর্ঘ্য", value: "৫০ মিটার / রোল" },
-      { label: "কভারেজ", value: "প্রায় ৫০ বর্গমিটার (৫০০ বর্গফুট)" },
-      { label: "উপাদান", value: "ক্ষার-প্রতিরোধী কাচতন্তু জালিকা" },
-      { label: "রঙ", value: "সাদা / নীল" },
-      { label: "ব্যবহার", value: "ইট-কনক্রিট জোড়া, বাইরের দেয়াল, জানালার কোণা" },
-    ],
-  },
-  {
-    slug: "fiberglass-mesh-90-gsm",
-    name: "ফাইবারগ্লাস মেশ ৯০ GSM",
-    nameEn: "Fiberglass Mesh 90 GSM",
-    tagline: "ভারী কাজ ও বাইরের পৃষ্ঠের জন্য মজবুত সুরক্ষা",
-    description:
-      "৯০ GSM মেশ বেশি টান-শক্তি ধরে রাখে, তাই বাইরের দেয়াল, বড় জোড়া, ছাদের প্লাস্টার এবং পুরাতন দেয়াল মেরামতের কাজে এটি ব্যবহার করা হয়। যেখানে ফাটলের ঝুঁকি বেশি, সেখানে এটি সবচেয়ে নির্ভরযোগ্য।",
-    gsm: 90,
-    price: 2300,
-    unit: "রোল",
-    imageUrl: "/assets/product-90gsm.jpg",
-    badge: "বেস্ট ফর জোড়া",
-    sortOrder: 3,
-    specs: [
-      { label: "ওজন (GSM)", value: "৯০ গ্রাম/বর্গমিটার" },
-      { label: "জালিকার ছিদ্র", value: "৫ × ৫ মিমি" },
-      { label: "প্রস্থ", value: "১ মিটার" },
-      { label: "দৈর্ঘ্য", value: "৫০ মিটার / রোল" },
-      { label: "কভারেজ", value: "প্রায় ৫০ বর্গমিটার (৫০০ বর্গফুট)" },
-      { label: "উপাদান", value: "ক্ষার-প্রতিরোধী কাচতন্তু জালিকা" },
+      { label: "সাইজ", value: "৫০ × ০.৩৩ মিটার" },
+      { label: "ফিটে", value: "১৬০.৫ × ১.০৮ ফুট" },
+      { label: "মোট এরিয়া", value: "১৭৪ স্কয়ার ফিট" },
+      { label: "প্রস্থ", value: "০.৩৩ মিটার (১.০৮ ফুট)" },
+      { label: "দৈর্ঘ্য", value: "৫০ মিটার (১৬০.৫ ফুট)" },
+      { label: "উপাদান", value: "ক্ষার-প্রতিরোধী ফাইবারগ্লাস জালিকা" },
       { label: "রঙ", value: "সাদা" },
-      { label: "ব্যবহার", value: "ছাদের প্লাস্টার, বাইরের দেয়াল, বড় জোড়া, মেরামত" },
-    ],
-  },
-  {
-    slug: "fiberglass-mesh-160-gsm-alkali-resistant",
-    name: "ফাইবারগ্লাস মেশ ১৬০ GSM (আলকালাই রেজিস্ট্যান্ট)",
-    nameEn: "Fiberglass Mesh 160 GSM Alkali Resistant",
-    tagline: "প্রিমিয়াম গ্রেড - স্ল্যাব, কলাম ও ইন্ডাস্ট্রিয়াল কাজের জন্য",
-    description:
-      "১৬০ GSM প্রিমিয়াম গ্রেড মেশ ভারী কনস্ট্রাকশন, স্ল্যাব রিইনফোর্সমেন্ট, কলাম ও থার্মোকল/ইনসুলেশন প্যানেলের ফিনিশিং স্তরে ব্যবহার হয়। উচ্চ টান-শক্তি এবং ক্ষার প্রতিরোধী কোটিং থাকায় দীর্ঘমেয়াদে ফাটল প্রতিরোধে সেরা ফলাফল দেয়।",
-    gsm: 160,
-    price: 3400,
-    unit: "রোল",
-    imageUrl: "/assets/product-160gsm.jpg",
-    badge: "প্রিমিয়াম",
-    sortOrder: 4,
-    specs: [
-      { label: "ওজন (GSM)", value: "১৬০ গ্রাম/বর্গমিটার" },
-      { label: "জালিকার ছিদ্র", value: "৫ × ৫ মিমি" },
-      { label: "প্রস্থ", value: "১ মিটার" },
-      { label: "দৈর্ঘ্য", value: "৫০ মিটার / রোল" },
-      { label: "কভারেজ", value: "প্রায় ৫০ বর্গমিটার (৫০০ বর্গফুট)" },
-      { label: "উপাদান", value: "উচ্চ-শক্তির ক্ষার-প্রতিরোধী কাচতন্তু" },
-      { label: "রঙ", value: "সাদা" },
-      { label: "ব্যবহার", value: "স্ল্যাব, কলাম, ইনসুলেশন প্যানেল, ইন্ডাস্ট্রিয়াল প্লাস্টার" },
+      {
+        label: "ব্যবহার",
+        value: "জোড়া, জানালা-দরজার কোণা, কলাম, ফাটল মেরামত, ছোট কাজ",
+      },
     ],
   },
 ];

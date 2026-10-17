@@ -41,6 +41,8 @@ model Product {
   unit        String     @default("রোল")
   badge       String?
   imageUrl    String?
+  /** All photos of this product, rendered as a carousel. First entry is primary. */
+  images      String[]   @default([])
   isActive    Boolean    @default(true)
   sortOrder   Int        @default(0)
   specs       SpecItem[]

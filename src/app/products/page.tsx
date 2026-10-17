@@ -6,6 +6,7 @@ import { ProductCard } from "@/components/products/ProductCard";
 import { Header } from "@/components/landing/Header";
 import { Footer } from "@/components/landing/Footer";
 import { MobileCallBar } from "@/components/landing/MobileCallBar";
+import { WhatsAppButton } from "@/components/landing/WhatsAppButton";
 import { SectionHeading } from "@/components/ui/Section";
 import { site } from "@/content/site";
 
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "সব পণ্য - ফাইবারগ্লাস মেশ",
   description:
-    "৪৫ GSM থেকে ১৬০ GSM পর্যন্ত ফাইবারগ্লাস মেশ - প্রতি রোল ১ মিটার × ৫০ মিটার। দাম, স্পেসিফিকেশন ও অর্ডার।",
+    "Big Roll (৫০ × ১ মিটার, ৫১৫ স্কয়ার ফিট) ও Small Roll (৫০ × ০.৩৩ মিটার, ১৭৪ স্কয়ার ফিট) ফাইবারগ্লাস মেশ - দাম, স্পেসিফিকেশন ও অর্ডার। ফেনী থেকে সারাদেশে হোম ডেলিভারি ও ক্যাশ অন ডেলিভারি।",
 };
 
 export default async function ProductsPage() {
@@ -45,19 +46,28 @@ export default async function ProductsPage() {
         </section>
 
         <section className="py-14">
-          <div className="container-x grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {products.map((product, index) => (
-              <ProductCard
-                key={product.slug}
-                product={product}
-                priority={index < 2}
-              />
-            ))}
+          <div className="container-x">
+            <div
+              className={
+                products.length <= 2
+                  ? "grid max-w-3xl gap-6 sm:grid-cols-2"
+                  : "grid gap-6 sm:grid-cols-2 lg:grid-cols-4"
+              }
+            >
+              {products.map((product, index) => (
+                <ProductCard
+                  key={product.slug}
+                  product={product}
+                  priority={index < 2}
+                />
+              ))}
+            </div>
           </div>
         </section>
       </main>
       <Footer />
       <MobileCallBar />
+      <WhatsAppButton />
     </>
   );
 }

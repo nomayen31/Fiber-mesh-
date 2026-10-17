@@ -28,7 +28,8 @@ CSV export.
 | Gallery | Recent Facebook posts, linking to the page |
 | FAQ | Accessible accordion |
 | About & contact | Business info, WhatsApp, Facebook, delivery/COD note, inquiry form |
-| Footer + mobile call bar | Always-reachable phone/WhatsApp on mobile |
+| Footer + mobile call bar | Always-reachable phone/WA/order bar |
+| Floating WhatsApp button | Bottom-right on every public page (`WhatsAppButton`) |
 
 ### Ordering
 
@@ -116,6 +117,7 @@ npm start
 | `NEXT_PUBLIC_FACEBOOK` | – | Facebook page URL (footer, contact card, gallery CTA). |
 | `NEXT_PUBLIC_ADDRESS` | – | Business address shown in the footer / contact card. |
 | `NEXT_PUBLIC_BUSINESS_HOURS` | – | Opening hours line. |
+| `NEXT_PUBLIC_FIREBASE_*` | – | Firebase Analytics web config (7 vars, see below). Leave unset to disable analytics. |
 | `NEON_BRANCH` | – | Written by the Neon CLI; informational. |
 
 Generate a production secret with:
@@ -123,6 +125,32 @@ Generate a production secret with:
 ```bash
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
+
+### Firebase Analytics
+
+`src/firebase.js` initialises Firebase and `src/components/analytics/FirebaseAnalytics.tsx` loads
+the SDK **after hydration, only on public pages** (never in `/admin`). Analytics is optional: if the
+variables are missing the site still works, and `getAnalytics()` is skipped on browsers that do not
+support it.
+
+```
+NEXT_PUBLIC_FIREBASE_API_KEY
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+NEXT_PUBLIC_FIREBASE_PROJECT_ID
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+NEXT_PUBLIC_FIREBASE_APP_ID
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+```
+
+> **Next.js, not Vite.** This is why the variables are `NEXT_PUBLIC_*` and not `VITE_*`. Only
+> `NEXT_PUBLIC_` variables are inlined into the browser bundle by `next build`; `import.meta.env`
+> does not exist in Next.js, and `VITE_*` variables would always be `undefined` at runtime.
+> `NEXT_PUBLIC_*` values are baked in **at build time**, so redeploy after changing one.
+
+The Firebase web config is public by design (it identifies the project, it does not authorise
+anything). **Never** put Admin SDK service-account credentials in the frontend or in any `VITE_` /
+`NEXT_PUBLIC_` variable.
 
 ### Self-hosting Postgres instead of Neon
 
@@ -147,7 +175,7 @@ docker compose up -d
 
 | Model | Notes |
 | --- | --- |
-| `Product` | slug, Bengali + English name, tagline, description, `gsm`, price (BDT), unit, badge, image, `sortOrder`, `isActive`, specs |
+| `Product` | slug, Bengali + English name, tagline, description, `gsm` (optional), price (BDT), unit, badge, `imageUrl` (primary photo), `images[]` (carousel), `sortOrder`, `isActive`, specs |
 | `SpecItem` | label/value rows belonging to a product, ordered by `sortOrder` |
 | `Order` | `orderNo` (unique, `FM-YYYYMMDD-NNNN`), customer, phone, **district**, address, product ref, quantity, unitPrice, subtotal, discount, delivery, total, status, source, note, timestamps |
 | `Inquiry` | contact-form submission with `isRead` flag |
@@ -302,13 +330,20 @@ All media is served from **`public/assets/`** (Next.js can only serve static fil
 | `logo.jpg` | header, footer, admin login (`Logo` in `components/ui/Section.tsx`) |
 | `hero-banner.jpg` | hero visual + video poster |
 | `promo-banner.png` | full-width promo strip under the hero |
-| `product-45gsm.jpg` … `product-160gsm.jpg` | product cards, product detail page, order-modal thumbnail |
+| `big-roll-1.jpg` … `big-roll-5.jpg` | **Big Roll** product carousel (cards, detail page, order modal) |
+| `small-roll-1.jpg` … `small-roll-3.jpg` | **Small Roll** product carousel |
+| `product-45gsm.jpg` … `product-160gsm.jpg` | retained from the previous catalogue — no longer referenced |
 | `post-story.jpg`, `post-facebook.jpg` | "Facebook page" gallery section |
 | `fiber-mesh-video.mp4` | video section (self-hosted, `preload="metadata"`) |
 
 To swap an image, replace the file in `public/assets/` keeping the same name — no code change
-needed. To add a new product photo, put the file in `public/assets/` and set `imageUrl` in
-`src/content/products.ts`, then `npm run db:seed`.
+needed. To add a product photo, put the file in `public/assets/`, add its path to `images[]` in
+`src/content/products.ts`, then `npm run db:seed`. The **first** entry is also written to `imageUrl`
+and used as the primary photo (order modal thumbnail, social previews).
+
+The carousel itself is `src/components/products/ProductImageCarousel.tsx`: swipe on touch, arrows
+and dots everywhere, optional thumbnail strip on the detail page. A product with a single photo
+renders without controls.
 
 Notes:
 
@@ -360,7 +395,7 @@ This project is deployed to Vercel as **`fiber-mesh`** with the GitHub repositor
 * Env vars set for Production: `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `ADMIN_PASSWORD`,
   `AUTH_SECRET`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_PHONE`, `NEXT_PUBLIC_PHONE_DISPLAY`,
   `NEXT_PUBLIC_WHATSAPP`, `NEXT_PUBLIC_ADDRESS`, `NEXT_PUBLIC_FACEBOOK`,
-  `NEXT_PUBLIC_BUSINESS_HOURS`.
+  `NEXT_PUBLIC_BUSINESS_HOURS`, plus the seven `NEXT_PUBLIC_FIREBASE_*` Analytics values.
 
 Deploy from the CLI:
 

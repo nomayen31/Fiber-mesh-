@@ -13,11 +13,12 @@ function fromSeed(product: SeedProduct): ProductView {
     nameEn: product.nameEn,
     tagline: product.tagline,
     description: product.description,
-    gsm: product.gsm,
+    gsm: product.gsm ?? null,
     price: product.price,
     unit: product.unit,
     badge: product.badge ?? null,
-    imageUrl: product.imageUrl ?? null,
+    imageUrl: product.images[0] ?? null,
+    images: product.images,
     specs: product.specs,
   };
 }
@@ -49,6 +50,13 @@ export async function getProducts(): Promise<ProductView[]> {
       unit: row.unit,
       badge: row.badge,
       imageUrl: row.imageUrl,
+      // Older rows predate `images` — fall back to the single primary photo.
+      images:
+        row.images && row.images.length > 0
+          ? row.images
+          : row.imageUrl
+            ? [row.imageUrl]
+            : [],
       specs: row.specs.map((spec) => ({
         label: spec.label,
         value: spec.value,

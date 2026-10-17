@@ -1,12 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { site } from "@/content/site";
 import { OrderModalProvider } from "@/components/order/OrderModalProvider";
+import { FirebaseAnalytics } from "@/components/analytics/FirebaseAnalytics";
 import "./globals.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 const description =
-  "বাংলাদেশে ফাইবারগ্লাস মেশ (Fiberglass Mesh) এর বিশ্বস্ত সরবরাহকারী। দেয়ালের ফাটল, ইট-কনক্রিট জোড়া, জানালার কোণা ও বাইরের প্লাস্টারে ব্যবহারের জন্য ৪৫-১৬০ GSM ফাইবারগ্লাস মেশ। ঢাকাসহ সারাদেশে ডেলিভারি।";
+  "বাংলাদেশে ফাইবারগ্লাস মেশ (Fiberglass Mesh) এর বিশ্বস্ত সরবরাহকারী। দেয়ালের ফাটল, ইট-কনক্রিট জোড়া, জানালার কোণা ও বাইরের প্লাস্টারে ব্যবহারের জন্য Big Roll (৫১৫ স্কয়ার ফিট) ও Small Roll (১৭৪ স্কয়ার ফিট) ফাইবারগ্লাস মেশ। ফেনী থেকে সারাদেশে হোম ডেলিভারি ও ক্যাশ অন ডেলিভারি।";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -25,7 +26,7 @@ export const metadata: Metadata = {
     "crack control mesh",
     "ইট কনক্রিট জোড়",
     "আলকালাই রেজিস্ট্যান্ট মেশ",
-    "GSM mesh roll",
+    "ফাইবারগ্লাস মেশ রোল দাম",
     "construction mesh price Bangladesh",
   ],
   authors: [{ name: site.brand.name }],
@@ -85,6 +86,8 @@ export default function RootLayout({
       <body>
         {/* The provider powers every "অর্ডার করুন" button on the site. */}
         <OrderModalProvider>{children}</OrderModalProvider>
+        {/* Loads only in the browser, only on public pages, and never blocks render. */}
+        <FirebaseAnalytics />
       </body>
     </html>
   );

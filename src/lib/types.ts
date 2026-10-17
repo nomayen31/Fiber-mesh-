@@ -14,6 +14,8 @@ export type ProductSummary = {
   unit: string;
   badge: string | null;
   imageUrl: string | null;
+  /** Every photo of the product — the carousel renders these in order. */
+  images: string[];
   specs: ProductSpec[];
 };
 

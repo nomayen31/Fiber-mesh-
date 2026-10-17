@@ -20,7 +20,13 @@ export async function ProductsSection() {
           subtitle={copy.subtitle}
         />
 
-        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div
+          className={
+            products.length <= 2
+              ? "mx-auto mt-12 grid max-w-3xl gap-6 sm:grid-cols-2"
+              : "mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4"
+          }
+        >
           {products.map((product, index) => (
             <ProductCard
               key={product.slug}

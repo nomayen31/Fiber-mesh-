@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Check, Truck } from "lucide-react";
@@ -7,6 +6,8 @@ import { getProductBySlug, getProducts } from "@/lib/catalog";
 import { Header } from "@/components/landing/Header";
 import { Footer } from "@/components/landing/Footer";
 import { MobileCallBar } from "@/components/landing/MobileCallBar";
+import { WhatsAppButton } from "@/components/landing/WhatsAppButton";
+import { ProductImageCarousel } from "@/components/products/ProductImageCarousel";
 import {
   ProductCallButton,
   ProductOrderButton,
@@ -66,45 +67,28 @@ export default async function ProductDetailPage({ params }: PageProps) {
           <div className="container-x grid gap-10 lg:grid-cols-2 lg:gap-14">
             {/* visual */}
             <div>
-              {product.imageUrl ? (
-                <div className="relative aspect-[4/5] overflow-hidden rounded-3xl border border-slate-200 bg-white">
-                  <Image
-                    src={product.imageUrl}
-                    alt={product.name}
-                    fill
-                    priority
-                    sizes="(max-width: 1024px) 100vw, 50vw"
-                    className="object-contain"
-                  />
-                </div>
-              ) : (
-                <div className="mesh-surface flex aspect-[4/3] items-center justify-center rounded-3xl border border-slate-200">
-                  <span className="rounded-2xl bg-white/85 px-6 py-4 text-center shadow-sm ring-1 ring-slate-200 backdrop-blur">
-                    <span className="block text-4xl font-bold text-slate-900">
-                      {product.gsm ?? ""} GSM
-                    </span>
-                    <span className="mt-1 block text-xs font-medium tracking-[0.2em] text-brand-700">
-                      FIBERGLASS MESH
-                    </span>
-                  </span>
-                </div>
-              )}
+              <ProductImageCarousel
+                images={product.images}
+                alt={product.name}
+                sizes="(max-width: 1024px) 100vw, 50vw"
+                priority
+                className="aspect-[4/5] rounded-3xl border border-slate-200 bg-white"
+                imageClassName="object-contain p-3"
+                showThumbnails
+                thumbnailsClassName="mt-4 justify-center"
+              />
 
               <ul className="mt-5 grid grid-cols-3 gap-3 text-center">
-                {[
-                  { label: "প্রস্থ", value: "১ মিটার" },
-                  { label: "দৈর্ঘ্য", value: "৫০ মিটার" },
-                  { label: "কভারেজ", value: "৫০ বর্গমিটার" },
-                ].map((item) => (
+                {product.specs.slice(0, 3).map((spec) => (
                   <li
-                    key={item.label}
+                    key={spec.label}
                     className="rounded-xl border border-slate-200 bg-white p-3"
                   >
                     <span className="block text-xs text-slate-500">
-                      {item.label}
+                      {spec.label}
                     </span>
-                    <span className="mt-0.5 block text-sm font-semibold text-slate-800">
-                      {item.value}
+                    <span className="mt-0.5 block text-[13px] font-semibold leading-snug text-slate-800">
+                      {spec.value}
                     </span>
                   </li>
                 ))}
@@ -209,7 +193,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
         {others.length > 0 ? (
           <section className="border-t border-slate-200 bg-slate-50 py-14">
             <div className="container-x">
-              <h2 className="text-xl">অন্য মডেলগুলোও দেখুন</h2>
+              <h2 className="text-xl">অন্য সাইজও দেখুন</h2>
               <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {others.map((item) => (
                   <ProductCard key={item.slug} product={item} />
@@ -228,6 +212,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
       </main>
       <Footer />
       <MobileCallBar />
+      <WhatsAppButton />
     </>
   );
 }

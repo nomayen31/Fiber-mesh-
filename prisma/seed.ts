@@ -15,35 +15,37 @@ const prisma = new PrismaClient();
 async function main() {
   console.log(`Seeding ${seedProducts.length} products...`);
 
+  const slugs = seedProducts.map((product) => product.slug);
+
+  // Products that are no longer in the catalogue are removed so the storefront
+  // and the admin dropdown only ever show what is really for sale. Existing
+  // orders keep their own `productName` snapshot, so history stays intact.
+  const retired = await prisma.product.deleteMany({
+    where: { slug: { notIn: slugs } },
+  });
+  if (retired.count > 0) {
+    console.log(`  – removed ${retired.count} product(s) no longer in the catalogue`);
+  }
+
   for (const product of seedProducts) {
+    const data = {
+      name: product.name,
+      nameEn: product.nameEn,
+      tagline: product.tagline,
+      description: product.description,
+      gsm: product.gsm ?? null,
+      price: product.price,
+      unit: product.unit,
+      badge: product.badge ?? null,
+      imageUrl: product.images[0] ?? null,
+      images: product.images,
+      sortOrder: product.sortOrder,
+    };
+
     const saved = await prisma.product.upsert({
       where: { slug: product.slug },
-      update: {
-        name: product.name,
-        nameEn: product.nameEn,
-        tagline: product.tagline,
-        description: product.description,
-        gsm: product.gsm,
-        price: product.price,
-        unit: product.unit,
-        badge: product.badge ?? null,
-        imageUrl: product.imageUrl ?? null,
-        sortOrder: product.sortOrder,
-        isActive: true,
-      },
-      create: {
-        slug: product.slug,
-        name: product.name,
-        nameEn: product.nameEn,
-        tagline: product.tagline,
-        description: product.description,
-        gsm: product.gsm,
-        price: product.price,
-        unit: product.unit,
-        badge: product.badge ?? null,
-        imageUrl: product.imageUrl ?? null,
-        sortOrder: product.sortOrder,
-      },
+      update: { ...data, isActive: true },
+      create: { slug: product.slug, ...data },
       select: { id: true, name: true },
     });
 
@@ -58,12 +60,18 @@ async function main() {
       })),
     });
 
-    console.log(`  ✔ ${saved.name} (${product.specs.length} specs)`);
+    console.log(
+      `  ✔ ${saved.name} — ${formatBdt(product.price)}, ${product.images.length} photo(s), ${product.specs.length} specs`,
+    );
   }
 
   const productCount = await prisma.product.count();
   const orderCount = await prisma.order.count();
   console.log(`Done. products=${productCount}, existing orders=${orderCount}`);
+}
+
+function formatBdt(value: number) {
+  return `৳${value.toLocaleString("bn-BD")}`;
 }
 
 main()

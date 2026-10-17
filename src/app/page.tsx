@@ -15,6 +15,7 @@ import { Faq } from "@/components/landing/Faq";
 import { AboutContact } from "@/components/landing/AboutContact";
 import { Footer } from "@/components/landing/Footer";
 import { MobileCallBar } from "@/components/landing/MobileCallBar";
+import { WhatsAppButton } from "@/components/landing/WhatsAppButton";
 import { site } from "@/content/site";
 
 export const metadata: Metadata = {
@@ -41,14 +42,15 @@ export default function HomePage() {
         <ConcreteReinforcement />
         <HowTo />
         <VideoSection />
-        <ProductsSection />
         <Testimonials />
         <Gallery />
         <Faq />
         <AboutContact />
+        <ProductsSection />
       </main>
       <Footer />
       <MobileCallBar />
+      <WhatsAppButton />
     </>
   );
 }

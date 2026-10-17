@@ -1,9 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowUpRight, Check, ShoppingBag } from "lucide-react";
 import { useOrderModal } from "@/components/order/order-context";
+import { ProductImageCarousel } from "@/components/products/ProductImageCarousel";
 import { site } from "@/content/site";
 import { formatBdt } from "@/lib/utils";
 import type { ProductSummary } from "@/lib/types";
@@ -21,31 +21,16 @@ export function ProductCard({
 
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-card-hover">
-      {/* ── image ── */}
+      {/* ── image carousel ── */}
       <div className="relative bg-slate-50/70">
-        {product.imageUrl ? (
-          <div className="relative aspect-[4/5] w-full">
-            <Image
-              src={product.imageUrl}
-              alt={product.name}
-              fill
-              priority={priority}
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-              className="object-contain"
-            />
-          </div>
-        ) : (
-          <div className="mesh-surface flex aspect-[4/5] items-center justify-center">
-            <span className="rounded-xl bg-white/85 px-4 py-2 text-center shadow-sm ring-1 ring-slate-200 backdrop-blur">
-              <span className="block text-2xl font-bold text-slate-900">
-                {product.gsm ?? ""} GSM
-              </span>
-              <span className="mt-0.5 block text-[11px] font-medium text-brand-700">
-                FIBERGLASS MESH
-              </span>
-            </span>
-          </div>
-        )}
+        <ProductImageCarousel
+          images={product.images}
+          alt={product.name}
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+          priority={priority}
+          className="aspect-[4/5] w-full"
+          imageClassName="object-contain p-2.5"
+        />
 
         {product.badge ? (
           <span className="absolute left-3 top-3 rounded-full bg-accent-500 px-3 py-1 text-[11px] font-semibold text-white shadow-sm">

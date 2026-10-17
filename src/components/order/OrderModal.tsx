@@ -298,17 +298,20 @@ export function OrderModal({
             {selectedProduct ? (
               <div className="flex items-center gap-3.5 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-white ring-1 ring-slate-200">
-                  {selectedProduct.imageUrl ? (
+                  {selectedProduct.imageUrl ?? selectedProduct.images[0] ? (
                     <Image
-                      src={selectedProduct.imageUrl}
+                      src={
+                        (selectedProduct.imageUrl ??
+                          selectedProduct.images[0]) as string
+                      }
                       alt={selectedProduct.name}
                       fill
                       sizes="64px"
                       className="object-contain"
                     />
                   ) : (
-                    <span className="flex h-full w-full items-center justify-center text-[11px] font-bold text-brand-700">
-                      {selectedProduct.gsm ?? ""} GSM
+                    <span className="flex h-full w-full items-center justify-center px-1 text-center text-[10px] font-bold leading-tight text-brand-700">
+                      FIBERGLASS MESH
                     </span>
                   )}
                 </div>
