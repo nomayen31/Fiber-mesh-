@@ -74,9 +74,15 @@ Neither mistake breaks the website. See *Graceful degradation* at the end.
 
 9. **Register the file with EAS** — done once, and only because the repo is
    public. EAS CLI builds the upload archive using `.gitignore` rules, so a
-   git-ignored `google-services.json` would never reach the build servers and
-   the build would fail with `Cannot copy google-services.json from …`.
-   Upload it to EAS once as a *file*-type environment variable instead:
+   git-ignored `google-services.json` is not uploaded and the build would fail
+   with `Cannot copy google-services.json from …`. You can confirm what the
+   archive contains before spending a build:
+
+   ```powershell
+   npx eas-cli@latest build:inspect --platform android --stage archive --output "$env:TEMP\eas-archive"
+   ```
+
+   Upload the file to EAS once as a *file*-type environment variable instead:
 
    ```powershell
    cd "D:\fiber mesh website\apps\lead-notify"
