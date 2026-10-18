@@ -620,12 +620,12 @@ The full audit — findings, fixes, open risks, and what could not be verified �
 
 ## Sample data
 
-The database currently holds the **2 real products**, **4 orders** and **1 inquiry**.
-Only one order is a genuine customer order — `FM-20261018-0001`, placed through the
-live site while testing. **Do not delete that order**; it is a real record. The other
-three (`FM-20261018-0002` … `0004`) were placed through the website on 18 Oct 2026 with
-obvious placeholder notes and are awaiting a decision on whether to keep or remove
-them. The single inquiry arrived through the public contact form.
+The database currently holds the **2 real products**, **5 orders** and **1 inquiry**.
+Two orders are genuine customer orders placed through the live site —
+`FM-20261018-0001` and `FM-20261018-0005` (`Nomayen Hossain`). **Do not delete them.**
+The other three (`FM-20261018-0002` … `0004`) were placed with obvious placeholder notes
+and are awaiting a decision on whether to keep or remove them. The single inquiry arrived
+through the public contact form.
 
 The notification and manual-order integration tests create their own marker-scoped
 rows (`NOTIFYTEST-…` / `MANUALTEST-…`) and delete exactly what they created, so they

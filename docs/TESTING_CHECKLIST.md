@@ -4,11 +4,10 @@ Two parts: what is **already verified by automated tests**, and what only
 **you** can verify by hand because it needs a real phone and a real Firebase
 project.
 
-> **Status at the time of writing (18 Oct 2026).** Part 1 is green except for one
-> deliberate failure in the production smoke test — see the note under
-> §"Production smoke test". **Nothing in Part 2 has been performed.** No
-> real-device result is claimed anywhere in these docs, including for the
-> notification flow, which is the whole point of Part 2.
+> **Status at the time of writing (18 Oct 2026).** Part 1 is fully green, including the
+> production smoke test. **Nothing in Part 2 has been performed.** No real-device
+> result is claimed anywhere in these docs — the notification flow is exactly what
+> Part 2 exists to verify, and it is the one part still unproven.
 
 ---
 
@@ -190,12 +189,12 @@ the real database — the parts unit and integration tests cannot reach:
 
 It is self-cleaning and fails loudly if anything is left behind.
 
-> **It currently reports 52 passed, 1 failed — and that failure is real.** Against
-> today's live deployment, `pushConfigured` is `false`, `missingServerKeys` is
-> empty, and there is no `pushConfigIssue`, so the new check *"push is either
-> working or explicitly explained"* fails. That is precisely the state described
-> in `docs/SECURITY_AUDIT.md` finding **A-01**, which the undeployed fix resolves.
-> Expect **53/53** once the fix is deployed.
+> **Resolved.** Before the fix was deployed this reported **52 passed, 1 failed**:
+> `pushConfigured` was `false`, `missingServerKeys` was empty, and there was no
+> `pushConfigIssue`, so *"push is either working or explicitly explained"* failed — exactly
+> the state described in `docs/SECURITY_AUDIT.md` finding **A-01**. After deploying the
+> fix it reports **53 passed, 0 failed**, with `pushConfigured: true`,
+> `pushConfigIssue: null`, and the test job reaching **`SENT`** rather than `SKIPPED`.
 
 > Point it at a deployment deliberately — it is never part of `npm test`. When
 > targeting a deployed environment, `ADMIN_PASSWORD` must be **that

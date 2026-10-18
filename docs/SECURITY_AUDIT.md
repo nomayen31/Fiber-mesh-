@@ -105,6 +105,22 @@ is parsed and handed to the real `firebase-admin` `cert()` + `getMessaging()`, a
 `isPushConfigured()` is asserted `true`. `tests/integration.manual-order.ts` shows the
 end-to-end queue → dispatch → `SENT` path.
 
+**Confirmed against production after deploying the fix:**
+
+```
+npm run verify:push          → 53 passed, 0 failed
+  pushConfigured                                  = true
+  pushConfigIssue                                 = null
+  job reaches a terminal status                   = SENT   (was SKIPPED)
+  POST /api/admin/notifications/test → outcome    = sent   (real device, SM-A245F)
+```
+
+The contrast with the pre-deploy run is the proof. A real order placed *during* the
+outage (`FM-20261018-0005`, 20 minutes before the fix finished building) has a delivery
+row reading `SKIPPED  error=push-not-configured`, while the same send path one
+deployment later returns `sent`. No credential value was read at any point — only
+shapes, statuses and outcomes.
+
 ### A-02 — The diagnostic reported a false all-clear (Medium) — FIXED
 
 **Impact:** an administrator looking at the app's *সার্ভারের অবস্থা* panel, or at
@@ -341,18 +357,26 @@ Production currently holds four orders. The real customer order is untouched:
 ```
 
 Three further orders were placed through the website on 18 October and carry look-alike
-test data (`note` = twenty `a`s, `note` = ten `a`s):
+test data (`note` = twenty `a`s, `note` = ten `a`s), and a **fifth order is real** —
+`FM-20261018-0005` (`Nomayen Hossain`, the shop's own number), placed on 18 Oct while
+the fix was still building:
 
 ```
 2026-10-18T03:46  FM-20261018-0002  0179••••58  qty=5  total=12250  COMPLETED  WEBSITE
 2026-10-18T04:13  FM-20261018-0003  0158••••39  qty=1  total=2500   SHIPPED    WEBSITE  note=aaaaaaaaaaaaaaaaaaaa
 2026-10-18T05:02  FM-20261018-0004  0176••••25  qty=2  total=5000   PENDING    WEBSITE  note=aaaaaaaaaa
+2026-10-18T06:37  FM-20261018-0005  0158••••39  qty=2  total=5000   CONFIRMED  WEBSITE  ← real
 ```
 
-`0003` shares the real customer's phone number and its status has since been moved to
-`SHIPPED` from the dashboard, so it may be a genuine second order placed by the shop
-while testing the flow. `0002` also produced a `SKIPPED` notification job, consistent
-with the A-01 outage.
+`0003` and `0005` share the real customer's phone number, and `0003`'s status has since
+been moved to `SHIPPED` from the dashboard, so these may be genuine orders placed by the
+shop while testing the flow. `FM-20261018-0001` was also set to `CANCELLED` from the
+dashboard during this session — `DELETE` was never used.
+
+`0005`'s notification was **not** delivered: it arrived 20 minutes before the fixed
+build existed, and its delivery row reads `SKIPPED / push-not-configured`. That is the
+outage, captured in one row. It will not be retried retroactively, by design —
+`SKIPPED` is terminal, so old events never buzz late.
 
 There is also **one inquiry**, submitted through the public contact form at
 `2026-10-18T06:03Z` (same phone number as `0001`/`0003`, no subject, already marked
@@ -464,11 +488,14 @@ inactive-for-too-long rows.
   for all five. Configuration was therefore judged by *shape and behaviour* — the
   sanitized parser, the runtime log, and the live diagnostics response — not by reading
   the value.
-- **Real-device push delivery.** A real phone (`SM-A245F · Android 16`) is registered and
-  active, but no notification has ever been delivered, because A-01 disabled delivery
-  server-side. Delivery in foreground, background and terminated states must be confirmed
-  on the device after the fix is deployed — `docs/TESTING_CHECKLIST.md`, Part 2. **No
-  real-device result is claimed anywhere in these docs.**
+- **On-device push rendering.** Server-side delivery is now proven: after the fix was
+  deployed, `POST /api/admin/notifications/test` returned `sent` for the real registered
+  device, and the smoke test's job reached `SENT` instead of `SKIPPED`. What remains
+  unproven is **how that push is displayed** — foreground, background and terminated,
+  tap-through from a cold start, and the Bengali rendering on a lock screen. FCM
+  returning `sent` means the message was accepted and routed, not that the phone drew it.
+  `docs/TESTING_CHECKLIST.md`, Part 2 is the verification, and **no real-device display
+  result is claimed anywhere in these docs.**
 - **The APK binary beyond the earlier string scan** (Firebase sender id, channel
   `orders_high`, `POST_NOTIFICATIONS`, `FirebaseMessagingService`, package, scheme). Static
   inspection cannot prove runtime behaviour.
@@ -479,12 +506,15 @@ inactive-for-too-long rows.
 
 ## 7. Action items for you
 
-1. **Approve the redeploy** so A-01/A-02/A-03/A-04 reach production. Until then the live
-   site still cannot send a push. (I have not deployed.)
-2. **Confirm `AUTH_SECRET` for `Preview`/`Development`**, or accept that admin auth fails
+1. ~~**Approve the redeploy** so A-01/A-02/A-03/A-04 reach production.~~ **Done** —
+   commit `488c813` is deployed to https://fiber-mesh.vercel.app and `pushConfigured`
+   is now `true`. A test push has reached the real device.
+2. **Run Part 2 of `docs/TESTING_CHECKLIST.md` on the phone.** This is the last real
+   unknown: whether the notification is *displayed* in foreground, background and
+   terminated states, and whether a cold-start tap opens the right order.
+3. **Confirm `AUTH_SECRET` for `Preview`/`Development`**, or accept that admin auth fails
    closed there.
-3. **Set `CRON_SECRET`** and enable the `crons` entry if you want automatic retries.
-4. **Decide on orders `0002`–`0004`** (B-06).
+4. **Set `CRON_SECRET`** and enable the `crons` entry if you want automatic retries.
 5. Optional: add a CSP (B-01) and tighten `images.remotePatterns` (B-02).
 
 ---
