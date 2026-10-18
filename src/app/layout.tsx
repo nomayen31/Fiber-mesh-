@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { site } from "@/content/site";
 import { OrderModalProvider } from "@/components/order/OrderModalProvider";
 import { FirebaseAnalytics } from "@/components/analytics/FirebaseAnalytics";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -88,6 +89,7 @@ export default function RootLayout({
         <OrderModalProvider>{children}</OrderModalProvider>
         {/* Loads only in the browser, only on public pages, and never blocks render. */}
         <FirebaseAnalytics />
+        <Analytics />
       </body>
     </html>
   );
