@@ -4,17 +4,22 @@ The app is `apps/lead-notify/`, an Expo (React Native) project. The APK is built
 in the cloud with **EAS Build**, so no JDK, Android SDK or Android Studio is
 needed on this machine.
 
-> **Status.** Everything on the code side is configured and verified — the project
-> typechecks, `expo-doctor` reports 20/20 checks passing, and a preview APK
-> profile is ready. Two things must come from you before an APK can be produced,
-> because both need your accounts:
+> **Status.** The code side is complete, and the Firebase Android client config is
+> in place — `apps/lead-notify/google-services.json` exists and has been verified:
+> the native project generates with the Google Services Gradle plugin applied, the
+> `orders_high` channel and brand notification icon/colour in the manifest, and
+> `applicationId com.fibermesh.leadnotify` matching the file's `package_name`.
 >
-> 1. **`google-services.json`** — see [FIREBASE_SETUP.md](./FIREBASE_SETUP.md) Part A.
->    It has to exist *before* the build; `app.json` already points at it, so a
->    build without it fails with a clear "file not found" error rather than
->    silently producing an APK that can never receive a notification.
-> 2. **An Expo account login** — `eas build` uploads the project to Expo's build
->    servers under your account.
+> What remains needs your accounts:
+>
+> 1. **An Expo account login** — `eas build` uploads the project to Expo's build
+>    servers under your account, and that is where the APK is compiled. There is
+>    no JDK or Android SDK on this machine, so a local build is not an option.
+> 2. **The Firebase Admin service account** (see
+>    [FIREBASE_SETUP.md](./FIREBASE_SETUP.md) Part B) — not needed to *build* the
+>    APK, but needed for real pushes to be delivered. Without it the APK installs,
+>    registers, and shows everything correctly; the server just records each
+>    notification as `SKIPPED` and the app's Settings tab tells you why.
 >
 > Follow the steps below in order and you will have an installable, push-enabled
 > APK at the end.
@@ -27,7 +32,7 @@ needed on this machine.
 - An [Expo account](https://expo.dev/signup) — the free tier is enough. EAS
   gives every account a monthly allowance of Android builds.
 - A real Android phone (Android 7.0 or newer).
-- `apps/lead-notify/google-services.json` (FIREBASE_SETUP.md Part A).
+- `apps/lead-notify/google-services.json` — **already in place** and verified.
 
 ---
 
@@ -60,6 +65,28 @@ into `app.json`. Answer **yes** when it offers to create a project.
 
 If the CLI asks whether to configure the Android build, say yes; it will detect
 the existing `eas.json` and keep the `preview` profile.
+
+### Alternative — build without an interactive login (`EXPO_TOKEN`)
+
+`eas login` prompts for credentials, so it cannot be run by an agent or in CI.
+Expo's supported alternative is an **access token**:
+
+1. Create one at <https://expo.dev/settings/access-tokens> (name it something like
+   `fiber-mesh-ci`, and copy it — it is shown once).
+2. Export it and run everything non-interactively:
+
+   ```powershell
+   $env:EXPO_TOKEN = "your-token"
+   npx eas-cli@latest init --non-interactive
+   npx eas-cli@latest build --platform android --profile preview --non-interactive
+   ```
+
+Treat this token like a password: it can act on your Expo account. Do not commit
+it, and revoke it at the same page when you are finished with it. On Vercel or
+GitHub Actions it belongs in a secret, never in a file.
+
+`eas init` still has to run once so that `extra.eas.projectId` exists in
+`app.json`; `eas build` cannot infer the project without it.
 
 ---
 
@@ -221,6 +248,7 @@ Two consequences worth knowing:
 | `android.package` | `com.fibermesh.leadnotify` | Must match `package_name` in `google-services.json`. A mismatch means zero notifications, with no error on the phone. |
 | `android.googleServicesFile` | `./google-services.json` | Firebase client config. |
 | `plugins → expo-notifications → defaultChannel` | `orders_high` | Must match `ANDROID_CHANNEL_ID` in `src/lib/notifications/config.ts` **and** `ANDROID_CHANNEL_ID` in `src/lib/push.ts`. |
+| `plugins → expo-notifications → icon` | `./assets/images/notification-icon.png` | The status-bar icon. Must be a **bold silhouette** — Android renders it as a 24 dp alpha mask. Do not point this at the launcher icon; see [MOBILE_APP_SETUP.md](./MOBILE_APP_SETUP.md). |
 | `plugins → expo-notifications → color` | `#2574eb` | Brand blue, same as the website. |
 | `userInterfaceStyle` | `light` | The dashboard has no dark theme; forcing light avoids unreadable text. |
 

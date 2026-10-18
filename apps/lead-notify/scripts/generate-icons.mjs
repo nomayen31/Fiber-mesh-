@@ -200,8 +200,7 @@ function render({ size, markScale, plate }) {
 }
 
 /** A flat gradient square with no mesh — the adaptive icon's background layer. */
-function renderPlate(size) {
-  const rgba = Buffer.alloc(size * size * 4);
+function renderPlate(size) {  const rgba = Buffer.alloc(size * size * 4);
   const centre = (size - 1) / 2;
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
@@ -213,6 +212,59 @@ function renderPlate(size) {
       rgba[offset + 3] = 255;
     }
   }
+  return encodePng(size, size, rgba);
+}
+
+/* ──────────────────────────── notification icon ──────────────────────────── */
+
+/**
+ * The status-bar icon is drawn by Android as a **24 dp alpha mask** and tinted,
+ * so it has to be a bold silhouette: any detail finer than a couple of density
+ * pixels turns to mush at that size.
+ *
+ * The lattice is therefore replaced by the coarsest possible version of it — a
+ * mesh panel: a rounded square with four square openings. That still reads as
+ * weaving mesh, but every feature is a large block, so it survives 24 dp.
+ */
+function renderNotificationIcon(size) {
+  const rgba = Buffer.alloc(size * size * 4);
+  const centre = (size - 1) / 2;
+  const half = (size / 2) * 0.94;
+  const radius = half * 0.24;
+
+  const openingOffset = half * 0.33;
+  const openingHalf = half * 0.24;
+  const openingRadius = openingHalf * 0.32;
+
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const dx = x - centre;
+      const dy = y - centre;
+
+      const plate = clamp(0.5 - roundedRectSdf(dx, dy, half, half, radius), 0, 1);
+      if (plate === 0) continue;
+
+      let opening = 0;
+      for (const sx of [-1, 1]) {
+        for (const sy of [-1, 1]) {
+          const hole = clamp(
+            0.5 - roundedRectSdf(dx - sx * openingOffset, dy - sy * openingOffset, openingHalf, openingHalf, openingRadius),
+            0,
+            1,
+          );
+          if (hole > opening) opening = hole;
+        }
+      }
+
+      const offset = (y * size + x) * 4;
+      // White on transparent: Android only uses the alpha channel, then tints it.
+      rgba[offset] = 255;
+      rgba[offset + 1] = 255;
+      rgba[offset + 2] = 255;
+      rgba[offset + 3] = Math.round(plate * (1 - opening) * 255);
+    }
+  }
+
   return encodePng(size, size, rgba);
 }
 
@@ -235,6 +287,10 @@ const FILES = [
   ["android-icon-monochrome.png", render({ size: 1024, markScale: 0.62, plate: false })],
   // Splash screen (shown on the brand-blue background set in app.json).
   ["splash-icon.png", render({ size: 512, markScale: 0.9, plate: false })],
+  // Android status-bar icon for a notification. Bold silhouette, not the lattice:
+  // see renderNotificationIcon. Points the expo-notifications plugin at a separate
+  // file so the launcher icon and the notification icon can differ.
+  ["notification-icon.png", renderNotificationIcon(1024)],
   // Web favicon.
   ["favicon.png", render({ size: 96, markScale: 0.95, plate: true })],
 ];

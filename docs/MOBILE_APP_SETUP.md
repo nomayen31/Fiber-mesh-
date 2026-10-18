@@ -218,3 +218,18 @@ Two things worth knowing if you edit the design:
   of it.
 - The lattice is deliberately coarse. A denser weave looks better at 1024 px and
   turns to mush once the launcher downsamples the icon to 48 dp.
+
+**The notification icon is a separate file on purpose.** Android draws the
+status-bar icon as a **24 dp alpha mask** and tints it, so the lattice cannot
+survive there — at 24 dp it renders as an indistinct hatch. `notification-icon.png`
+is therefore the coarsest version of the same idea: a rounded panel with four
+square openings, which still reads as woven mesh but has no feature small enough
+to disappear. `app.json` points `plugins → expo-notifications → icon` at it while
+the launcher icon keeps the full lattice.
+
+That distinction is easy to lose: expo-notifications silently *accepts* any image
+and downscales it, so pointing the plugin at the launcher icon produces a build
+that succeeds and a status-bar icon that looks broken. If you change the
+notification icon, run `npx expo prebuild --platform android --clean` and then
+look at `android/app/src/main/res/drawable-xxxhdpi/notification_icon.png` (96 px)
+to confirm it still reads.
