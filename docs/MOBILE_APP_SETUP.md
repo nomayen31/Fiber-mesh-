@@ -70,9 +70,12 @@ The Settings tab reports this honestly rather than failing silently: it shows
 ```
 apps/lead-notify/
 ├─ app.json                 Expo config: package name, icons, plugins, permissions
+├─ app.config.js            extends app.json; only points googleServicesFile at
+│                           the EAS file variable on a build runner
 ├─ eas.json                 Build profiles (preview → APK)
 ├─ .env.example             EXPO_PUBLIC_* template
-├─ google-services.json     ← you add this (git-ignored). See FIREBASE_SETUP.md
+├─ google-services.json     ← you add this (git-ignored) **and** upload it to EAS as
+│                           the file variable GOOGLE_SERVICES_JSON. See FIREBASE_SETUP.md
 ├─ assets/images/           Icon, splash, adaptive-icon layers
 ├─ scripts/
 │  └─ generate-icons.mjs    regenerates those icons from code

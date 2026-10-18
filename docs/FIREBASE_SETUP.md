@@ -7,7 +7,7 @@ There are two independent pieces. They are easy to confuse, so keep them apart:
 
 | | Who needs it | What it is | Where it goes |
 |---|---|---|---|
-| **A. `google-services.json`** | the **app** | public Firebase *client* config. It lets the phone ask Google for an FCM registration token. | `apps/lead-notify/google-services.json` (git-ignored, never committed) |
+| **A. `google-services.json`** | the **app** | public Firebase *client* config. It lets the phone ask Google for an FCM registration token. | local file `apps/lead-notify/google-services.json` (git-ignored, never committed) **+** an EAS environment variable, so EAS Build can see it — see *Part A step 9* |
 | **B. Service account** | the **server** | private Firebase *admin* credentials. They let the backend send a push to a device. | Vercel environment variables (never in the app, never in git) |
 
 Both belong to the **existing `fiber-mesh` Firebase project** — the same one the website already uses for Analytics (`G-6H5ZZ2PTC1`). Do **not** create a second Firebase project.
@@ -68,8 +68,38 @@ Neither mistake breaks the website. See *Graceful degradation* at the end.
    D:\fiber mesh website\apps\lead-notify\google-services.json
    ```
 
-8. That's it. The file is already referenced from `apps/lead-notify/app.json`
+8. That's it for Firebase. Nothing goes into Vercel for Part A. The file is
+   already referenced from `apps/lead-notify/app.json`
    (`expo.android.googleServicesFile`) and is already listed in `.gitignore`.
+
+9. **Register the file with EAS** — done once, and only because the repo is
+   public. EAS CLI builds the upload archive using `.gitignore` rules, so a
+   git-ignored `google-services.json` would never reach the build servers and
+   the build would fail with `Cannot copy google-services.json from …`.
+   Upload it to EAS once as a *file*-type environment variable instead:
+
+   ```powershell
+   cd "D:\fiber mesh website\apps\lead-notify"
+   npx eas-cli@latest env:set --name GOOGLE_SERVICES_JSON --type file `
+     --value .\google-services.json --visibility sensitive `
+     --environment production --environment preview --environment development `
+     --non-interactive
+   ```
+
+   On a build runner that variable's value is the **absolute path** to the
+   uploaded copy, and `apps/lead-notify/app.config.js` feeds that path into
+   `android.googleServicesFile`. Locally the variable is unset and the same file
+   is read from `./google-services.json`, so nothing changes for local builds.
+
+   Rotating the file later = change it locally, then re-run the command with
+   `--force` (or `eas env:set` again, which overwrites).
+
+   ```powershell
+   npx eas-cli@latest env:list --environment production   # confirm it is there
+   ```
+
+   If it is ever missing, the build fails at prebuild with a clear error — it
+   never silently produces an APK without Firebase.
 
 ### Verifying it is correct
 

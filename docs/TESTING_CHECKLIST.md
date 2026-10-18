@@ -138,6 +138,9 @@ before it.
 
 - [ ] `google-services.json` exists at `apps/lead-notify/google-services.json`
       and its `package_name` is exactly `com.fibermesh.leadnotify`
+- [ ] The same file is uploaded to EAS as the file-type variable
+      `GOOGLE_SERVICES_JSON` (`npx eas-cli@latest env:list --environment preview`)
+      — without it a cloud build has no Firebase config
 - [ ] `FIREBASE_SERVICE_ACCOUNT_JSON` is set in Vercel, and the project was
       redeployed afterwards
 - [ ] `NOTIFY_EVENTS` is unset, or explicitly

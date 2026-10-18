@@ -33,6 +33,23 @@ needed on this machine.
   gives every account a monthly allowance of Android builds.
 - A real Android phone (Android 7.0 or newer).
 - `apps/lead-notify/google-services.json` — **already in place** and verified.
+- The same file uploaded to EAS once, as a *file*-type environment variable
+  named `GOOGLE_SERVICES_JSON` — **already done** on this project. This is not
+  optional: the file is git-ignored (the repo is public) and EAS builds its
+  upload archive from `.gitignore` rules, so without the variable the file never
+  reaches the build server. Recreate or rotate it with:
+
+  ```powershell
+  cd "D:\fiber mesh website\apps\lead-notify"
+  npx eas-cli@latest env:set --name GOOGLE_SERVICES_JSON --type file `
+    --value .\google-services.json --visibility sensitive `
+    --environment production --environment preview --environment development `
+    --non-interactive
+  ```
+
+  `apps/lead-notify/app.config.js` reads that variable on the build runner and
+  points `expo.android.googleServicesFile` at it; locally it falls back to
+  `./google-services.json`. Everything else still comes from `app.json`.
 
 ---
 
@@ -60,8 +77,14 @@ npx eas-cli@latest init
 `init` creates the EAS project and writes `extra.eas.projectId` (and `owner`)
 into `app.json`. Answer **yes** when it offers to create a project.
 
-> `app.json` intentionally has no `extra.eas.projectId` yet — it cannot be set
-> before an Expo account exists. `eas init` adds it. Commit the change it makes.
+This project is **already initialised** — `app.json` carries
+`extra.eas.projectId: ccbcc34e-2531-4a50-a483-75fb2d8b2c92` and
+`owner: nomayen31`, and `npx eas-cli@latest project:info` resolves to
+`@nomayen31/fiber-mesh-lead`. So `init` only needs re-running if that block is
+ever lost.
+
+> `app.json` is where the project id lives, not `app.config.js`: the dynamic
+> config extends `app.json`, so `eas init` can still write to it.
 
 If the CLI asks whether to configure the Android build, say yes; it will detect
 the existing `eas.json` and keep the `preview` profile.
@@ -87,6 +110,10 @@ GitHub Actions it belongs in a secret, never in a file.
 
 `eas init` still has to run once so that `extra.eas.projectId` exists in
 `app.json`; `eas build` cannot infer the project without it.
+
+Because a logged-in CLI session already exists on this machine, the token is
+only needed for unattended/CI runs. `npx eas-cli@latest whoami` shows whether a
+session is active.
 
 ---
 
@@ -128,9 +155,11 @@ EXPO_PUBLIC_API_BASE_URL = https://fiber-mesh.vercel.app
 The build runs on Expo's servers in roughly 5–15 minutes. The CLI streams the
 logs and prints a URL and a QR code when it finishes.
 
-**`google-services.json` is required at this point.** If you skipped Step 0,
-the build fails with a missing-file error. That is deliberate: an APK built
-without it cannot obtain an FCM token, so it could never receive a lead.
+**`google-services.json` is required at this point.** If the file is missing
+locally *and* the `GOOGLE_SERVICES_JSON` EAS variable is absent, the build fails
+at prebuild with `Cannot copy google-services.json from … to …`. That is
+deliberate: an APK built without it cannot obtain an FCM token, so it could
+never receive a lead.
 
 ---
 
@@ -257,7 +286,7 @@ Two consequences worth knowing:
 | Field | Value | Why it matters |
 |---|---|---|
 | `android.package` | `com.fibermesh.leadnotify` | Must match `package_name` in `google-services.json`. A mismatch means zero notifications, with no error on the phone. |
-| `android.googleServicesFile` | `./google-services.json` | Firebase client config. |
+| `android.googleServicesFile` | `./google-services.json` in `app.json`; overridden at build time by `app.config.js` from `GOOGLE_SERVICES_JSON` | Firebase client config. On EAS the variable holds the absolute path to the uploaded copy. |
 | `plugins → expo-notifications → defaultChannel` | `orders_high` | Must match `ANDROID_CHANNEL_ID` in `src/lib/notifications/config.ts` **and** `ANDROID_CHANNEL_ID` in `src/lib/push.ts`. |
 | `plugins → expo-notifications → icon` | `./assets/images/notification-icon.png` | The status-bar icon. Must be a **bold silhouette** — Android renders it as a 24 dp alpha mask. Do not point this at the launcher icon; see [MOBILE_APP_SETUP.md](./MOBILE_APP_SETUP.md). |
 | `plugins → expo-notifications → color` | `#2574eb` | Brand blue, same as the website. |
@@ -278,7 +307,7 @@ in a low-priority channel (no sound, no heads-up banner):
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `ENOENT … google-services.json` | Part A not done, or the file is in the wrong folder. | Place it at `apps/lead-notify/google-services.json`. |
+| `Cannot copy google-services.json from … to …` | The file is neither at `apps/lead-notify/google-services.json` on the machine running the build, nor uploaded as the EAS variable `GOOGLE_SERVICES_JSON`. | Do **both** steps of [FIREBASE_SETUP.md](./FIREBASE_SETUP.md) Part A: the local file for local builds, the EAS variable for cloud builds. |
 | `eas: command not found` | Using the bare `eas` command without a global install. | Use `npx eas-cli@latest …`. |
 | *"You need to log in"* | Not logged in. | `npx eas-cli@latest login`. |
 | *"Project not configured"* | `eas init` was skipped. | `npx eas-cli@latest init`. |
