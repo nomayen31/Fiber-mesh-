@@ -201,9 +201,9 @@ you intend to support over time:
 
 ## Production profile
 
-`eas.json` also defines a `production` profile — same APK output, plus a
-`channel` for over-the-air updates. Use it for the build you keep as the
-long-term install:
+`eas.json` also defines a `production` profile — the same APK output, kept as a
+named profile so the build you intend to support long-term is distinguishable
+from scratch/preview builds:
 
 ```powershell
 npx eas-cli@latest build --platform android --profile production
@@ -211,6 +211,18 @@ npx eas-cli@latest build --platform android --profile production
 
 Do not use `eas submit` — this app is deliberately not published to the Play
 Store.
+
+### Why there is no `channel` / over-the-air updates
+
+Both profiles produce a plain APK with **no OTA channel**, and `expo-updates` is
+not installed. Over-the-air updates only apply to builds that carry a `channel`,
+and adding one without `expo-updates` present is a silent no-op at best — so it
+is left out rather than left ambiguous. The consequence is honest and simple:
+**a new build must be installed to update the app.**
+
+If you later want OTA (useful here, since a sideloaded app gets no store
+updates), install `npx expo install expo-updates`, add back a `channel` per
+profile, and publish with `eas update`. It is not required for anything else.
 
 ---
 
@@ -223,9 +235,8 @@ APK is the right shape for a handful of company phones.
 
 Two consequences worth knowing:
 
-- **No automatic updates.** New builds must be reinstalled. (The `production`
-  profile's OTA channel can push JS-only changes without reinstalling, but that
-  is opt-in and not set up here.)
+- **No automatic updates.** New builds must be reinstalled (see *Why there is no
+  `channel` / over-the-air updates* above).
 - **Play Protect** may show a "scan this app?" prompt on first install. That is
   normal for sideloaded software.
 
