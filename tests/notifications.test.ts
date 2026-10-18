@@ -343,6 +343,49 @@ describe("dispatchPendingJobs", () => {
     const result = await dispatchPendingJobs({ store, sender });
     assert.equal(result.processed, 0);
   });
+
+  it("does not steal a job that another instance is still working on", async () => {
+    store.addDevice({ token: "token-a" });
+    const jobId = await enqueuedJobId();
+
+    // Exactly the state a live inline dispatch leaves behind while it runs.
+    await store.updateJob(jobId, { status: "PROCESSING", attempts: 1 });
+
+    const result = await dispatchPendingJobs({ store, sender });
+    assert.equal(result.processed, 0);
+    assert.equal(sender.calls.length, 0, "nothing may be sent twice");
+  });
+
+  it("recovers a job orphaned mid-send by a reclaimed instance", async () => {
+    store.addDevice({ token: "token-a" });
+    const jobId = await enqueuedJobId();
+
+    // The inline dispatch in `after()` claimed the job and then the platform
+    // froze the instance, so no terminal status was ever written. This is the
+    // state that used to strand the notification forever.
+    await store.updateJob(jobId, { status: "PROCESSING", attempts: 1 });
+    store.jobs.get(jobId)!.updatedAt = new Date(Date.now() - 10 * 60 * 1000);
+
+    const result = await dispatchPendingJobs({ store, sender });
+    assert.equal(result.processed, 1);
+    assert.equal(result.summaries[0]?.jobId, jobId);
+    assert.equal(store.jobs.get(jobId)?.status, "SENT");
+    assert.equal(sender.tokensSentTo().includes("token-a"), true);
+  });
+
+  it("never retries a job that already reached a terminal status", async () => {
+    store.addDevice({ token: "token-a" });
+    const jobId = await enqueuedJobId();
+    await dispatchJob(jobId, { store, sender });
+
+    assert.equal(store.jobs.get(jobId)?.status, "SENT");
+    for (const status of ["SENT", "SKIPPED"] as const) {
+      await store.updateJob(jobId, { status });
+      store.jobs.get(jobId)!.updatedAt = new Date(Date.now() - 60 * 60 * 1000);
+      const result = await dispatchPendingJobs({ store, sender });
+      assert.equal(result.processed, 0, `${status} must never be retried`);
+    }
+  });
 });
 
 /* ──────────────────────── FCM error classification ──────────────────────── */

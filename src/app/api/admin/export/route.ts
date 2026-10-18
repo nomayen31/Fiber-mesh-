@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { guardAdmin, jsonError } from "@/lib/api";
+import { guardAdmin, jsonError, logError } from "@/lib/api";
 import { csvFileName, toCsv, type CsvColumn } from "@/lib/csv";
 import { exportInquiries } from "@/lib/inquiries";
 import { exportOrders } from "@/lib/orders";
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[api/admin/export] failed:", error);
+    logError("[api/admin/export] failed:", error);
     return jsonError("CSV তৈরি করা যায়নি।", 500);
   }
 }

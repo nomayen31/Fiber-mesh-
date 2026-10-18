@@ -89,8 +89,9 @@ apps/lead-notify/
    │  │  ├─ dashboard.tsx   overview & analytics
    │  │  ├─ orders.tsx      order list, search, status filters, paging
    │  │  ├─ messages.tsx    customer inquiries, read/unread
-   │  │  └─ settings.tsx    push status, device list, logout
-   │  └─ order/[id].tsx     order detail — where a notification tap lands
+   │  │  └─ settings.tsx    push status, test notification, device list, logout
+   │  ├─ order/[id].tsx     order detail — where a notification tap lands
+   │  └─ manual-order.tsx   "ম্যানুয়াল অর্ডার যোগ করুন" — enter a phone lead by hand
    ├─ components/
    │  ├─ ui.tsx             Card, StatCard, StatusBadge, buttons, states
    │  ├─ BarChart.tsx       SVG bar chart (react-native-svg)
@@ -119,11 +120,36 @@ The mobile app is deliberately thin. It re-implements no business logic:
 | Order creation, pricing, validation | website (`src/lib/orders.ts`, `src/lib/validators.ts`) |
 | Authentication and the admin session | website (`src/lib/auth.ts`, `src/lib/session.ts`) |
 | Which events notify, retries, idempotency | website (`src/lib/notifications/*`) |
+| The district and product catalogue | website (`GET /api/admin/meta`) |
 | Presentation and the push lifecycle | this app |
 
-The app calls the **existing** endpoints. The only backend addition built for it
-is `GET /api/admin/orders/:id`, which the web dashboard did not need — it renders
-rows straight from the list endpoint. Everything else was already there.
+The app calls the **existing** endpoints. The backend additions built for it are
+additive and do not duplicate anything:
+
+- `GET /api/admin/orders/:id` — the web dashboard renders rows straight from the
+  list endpoint, so it never needed this.
+- `GET /api/admin/meta` — the district list and the live product catalogue **with
+  server prices**, so the phone never hardcodes either.
+- `POST /api/admin/notifications/test` — the Settings tab's test button.
+
+Manual order entry uses the **pre-existing** `POST /api/admin/orders`, which
+already snapshotted the product name and price, recomputed the subtotal, discount
+and total via `priceFor()`, and queued an `order.created` job. No second order
+endpoint, table or pricing implementation was created.
+
+### Why the phone never prices an order
+
+`apps/lead-notify/src/lib/format.ts` contains a copy of `priceFor()` and the bulk
+tiers. It exists **only** to render a live preview as the admin types. The price
+the form actually submits is the one the server supplied from
+`GET /api/admin/meta`, and `createManualOrder()` recomputes the money from that
+value and stores its own result. The preview is never authoritative, and the
+order detail screen always shows what the server stored.
+
+That copy is maintained by hand against `src/lib/utils.ts` +
+`src/content/products.ts`. **If a bulk tier changes, change it in both places** —
+`tests/manual-order.test.ts` pins the server-side tiers so a divergence is caught
+on the server side, but nothing can automatically catch a stale preview.
 
 The design tokens in `src/theme.ts` are copied from `tailwind.config.ts` and
 `src/components/admin/*` rather than imported, because the two projects have
@@ -135,9 +161,13 @@ separate bundlers. If a brand colour changes, change it in both places.
    a phone. Colours, typography, spacing, badges and the dark navy chrome
    (`slate-900`) are unchanged.
 2. **A Settings tab exists that the website has no equivalent for.** It shows
-   whether *this phone* is registered for push and whether the *server* has its
-   Firebase credentials — the two questions you will actually have when a
-   notification does not arrive.
+   whether *this phone* is registered for push, whether the *server* has usable
+   Firebase credentials (and if not, **why**), and a button that sends a test push
+   to this phone — the two questions you will actually have when a notification
+   does not arrive.
+
+The manual-order form's pickers are a native `Modal` bottom sheet rather than a
+new dependency; no picker library was added.
 
 ---
 
@@ -166,6 +196,7 @@ Run all of these from `apps/lead-notify/`:
 ```powershell
 npx expo start                 # dev server
 npm run typecheck              # tsc --noEmit
+npm run lint                   # eslint (expo lint)
 npx expo-doctor                # 20 dependency/config health checks
 npx expo install --fix         # align dependency versions with SDK 58
 npx expo config --type public   # print the resolved app config
@@ -181,11 +212,15 @@ installed SDK; `npm install` picks the latest and will eventually break the buil
 | Check | Result |
 |---|---|
 | `npx tsc --noEmit` | passes, no errors |
+| `npm run lint` | 0 errors, 11 documented React Compiler warnings |
 | `npx expo-doctor` | 20/20 checks pass |
 | `npx expo config` | resolves cleanly |
 | Root `npx tsc --noEmit` | passes (the app is excluded) |
-| Root `npm run build` | passes |
-| Root `npm test` | 26/26 unit tests pass |
+| Root `npm run build` | passes, 25 routes |
+| Root `npm test` | 79/79 unit tests pass |
+
+**Not yet verified:** anything that needs the app running on a real phone against
+a fixed backend. See `docs/TESTING_CHECKLIST.md`, Part 2.
 
 ---
 

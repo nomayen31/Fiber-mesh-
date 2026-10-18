@@ -116,14 +116,25 @@ async function main() {
   console.log("\n3) Delivery to every active device");
   const summary = await dispatchJob(jobId!, { store, sender });
   check("job reaches SENT", summary.status === "SENT", summary.status);
-  check("both devices were contacted", sender.tokensSentTo().length === 2);
+
+  // A real phone may be registered in this database (the app is live), so the
+  // assertions below are scoped to the devices this test created rather than to
+  // the total number of pushes the stub saw.
+  const contacted = sender
+    .tokensSentTo()
+    .filter((token) => token.startsWith(MARKER));
+  check(
+    "both test devices were contacted",
+    contacted.length === 2,
+    `contacted=${contacted.length}`,
+  );
 
   const deliveries = await prisma.notificationDelivery.findMany({
-    where: { jobId: jobId! },
+    where: { jobId: jobId!, deviceTokenId: { in: createdDeviceIds } },
     select: { status: true, messageId: true },
   });
   check(
-    "a SENT delivery row exists per device",
+    "a SENT delivery row exists per test device",
     deliveries.length === 2 && deliveries.every((d) => d.status === "SENT"),
     deliveries.map((d) => d.status).join(","),
   );

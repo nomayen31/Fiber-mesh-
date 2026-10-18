@@ -147,6 +147,32 @@ try {
       devicesBefore.missingServerKeys.every((k) => /^[A-Z_]+$/.test(k)),
     devicesBefore.missingServerKeys?.join(",") || "(none missing)",
   );
+  /**
+   * The check that would have caught the 18 Oct 2026 outage. `missingServerKeys`
+   * is empty whenever the variable is merely *present*, so before this field was
+   * added a broken credential produced a clean bill of health. When push is off,
+   * a reason must now be reported - either a missing variable name or a
+   * sanitized `pushConfigIssue` code.
+   */
+  check(
+    "push is either working or explicitly explained",
+    devicesBefore.pushConfigured === true ||
+      (devicesBefore.missingServerKeys?.length ?? 0) > 0 ||
+      typeof devicesBefore.pushConfigIssue?.code === "string",
+    devicesBefore.pushConfigured
+      ? "pushConfigured=true"
+      : `missing=${devicesBefore.missingServerKeys?.join(",") || "(none)"} issue=${JSON.stringify(devicesBefore.pushConfigIssue ?? null)}`,
+  );
+  check(
+    "any push config issue names fields only, never a value",
+    devicesBefore.pushConfigIssue === undefined ||
+      devicesBefore.pushConfigIssue === null ||
+      (/^[a-z-]+$/.test(devicesBefore.pushConfigIssue.code ?? "") &&
+        !/PRIVATE KEY|BEGIN|[A-Za-z0-9+/]{100}/.test(
+          JSON.stringify(devicesBefore.pushConfigIssue),
+        )),
+    JSON.stringify(devicesBefore.pushConfigIssue ?? null),
+  );
   check(
     "default enabled events are the two inbound lead events",
     devicesBefore.enabledEvents?.includes("order.created") &&
@@ -226,19 +252,25 @@ try {
   check("NO customer phone in the push", !scanned.includes(SECRET_PHONE));
   check("NO delivery address in the push", !scanned.includes("টেস্ট ঠিকানা"));
 
-  // Delivery is attempted via after(), so give it a moment to leave PENDING.
+  // Delivery is attempted via after(), so poll until the job reaches a terminal
+  // status rather than racing it: PROCESSING is a legitimate intermediate state
+  // and is not a failure.
+  const TERMINAL = ["SENT", "SKIPPED", "FAILED"];
   let settled = job;
-  for (let attempt = 0; attempt < 15 && settled?.status === "PENDING"; attempt += 1) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    settled = await prisma.notificationJob.findUnique({
+      where: { eventKey: `order.created:${order.id}` },
+    });
+    if (settled && TERMINAL.includes(settled.status)) break;
     await sleep(1_000);
-    settled = await prisma.notificationJob.findUnique({ where: { eventKey: `order.created:${order.id}` } });
   }
   check(
-    "the job settles instead of sitting PENDING forever",
-    settled && settled.status !== "PENDING",
+    "the job reaches a terminal status instead of sitting PENDING or PROCESSING forever",
+    settled && TERMINAL.includes(settled.status),
     `status=${settled?.status}${settled?.lastError ? ` lastError=${settled.lastError}` : ""}`,
   );
   check(
-    "with no Firebase credentials it degrades to SKIPPED (never FAILED)",
+    "a job that cannot be delivered is SKIPPED (never FAILED) - a missing credential is configuration, not a failure",
     settled?.status === "SKIPPED" || settled?.status === "SENT",
     `status=${settled?.status}`,
   );

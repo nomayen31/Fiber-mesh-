@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
   Linking,
   ScrollView,
@@ -14,8 +14,10 @@ import {
   Info,
   LogOut,
   RefreshCw,
+  Send,
   ServerCog,
   Smartphone,
+  XCircle,
 } from "lucide-react-native";
 
 import { usePush } from "@/components/NotificationBridge";
@@ -30,16 +32,41 @@ import {
   PrimaryButton,
   SectionTitle,
 } from "@/components/ui";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatNumber } from "@/lib/format";
 import { ENV_LABEL, useSession } from "@/lib/session";
 import { useApiData } from "@/lib/useApiData";
-import type { DeviceListResponse } from "@/lib/types";
+import type { DeviceListResponse, PushConfigIssue, PushTestOutcome } from "@/lib/types";
 import { colors, radius, space, typography } from "@/theme";
+
+/** Bengali wording for a raw FCM outcome code. */
+const TEST_OUTCOME_LABEL: Record<PushTestOutcome, string> = {
+  sent: "Firebase গ্রহণ করেছে",
+  "invalid-token": "টোকেন আর কাজ করে না — ফোনটি নিষ্ক্রিয় করা হয়েছে",
+  failed: "পাঠানো যায়নি, আবার চেষ্টা করা হবে",
+  skipped: "পাঠানো হয়নি (সেটআপ নেই বা বন্ধ)",
+};
+
+/** Bengali wording for why the server cannot send a push. */
+const PUSH_ISSUE_LABEL: Record<PushConfigIssue["code"], string> = {
+  "no-credentials": "সার্ভারে কোনো Firebase Admin কী নেই",
+  "invalid-json": "কী-টি JSON হিসেবে পড়া যাচ্ছে না (base64 হলে সেটিও ভুল)",
+  "missing-fields": "কী ফাইলে প্রয়োজনীয় ঘর নেই",
+  "invalid-private-key": "private_key ঘরটি সঠিক PEM কী নয়",
+  "init-failed": "Firebase Admin SDK কী-টি গ্রহণ করেনি",
+};
+
+/** What we remember about the last self-test. Never contains a token. */
+type TestOutcome = {
+  ok: boolean;
+  at: string;
+  message: string;
+  detail?: string;
+};
 
 /** Mobile-only screen: there is no equivalent on the website. */
 export default function SettingsScreen() {
   const { request, baseUrl, signOut } = useSession();
-  const { retry } = usePush();
+  const { retry, sendTest } = usePush();
 
   const load = useCallback(
     () => request((api) => api.get<DeviceListResponse>("/api/admin/devices")),
@@ -47,6 +74,58 @@ export default function SettingsScreen() {
   );
 
   const { data, error, loading, refresh, reload } = useApiData(load);
+
+  const [testing, setTesting] = useState(false);
+  const [test, setTest] = useState<TestOutcome | null>(null);
+
+  /**
+   * Ask the server to push a test to *this* account's registered phones.
+   *
+   * Each failure mode is reported as itself, so "Firebase accepted the message"
+   * is never confused with "the server has no credentials yet" or with "the
+   * phone is not registered".
+   */
+  const runTest = useCallback(async () => {
+    if (testing) return;
+    setTesting(true);
+    setTest(null);
+
+    try {
+      const result = await sendTest();
+      const problems = result.results.filter((item) => item.outcome !== "sent");
+
+      setTest({
+        ok: result.sentCount > 0,
+        at: new Date().toISOString(),
+        message:
+          result.sentCount > 0
+            ? `Firebase ${formatNumber(result.sentCount)}টি ফোনের জন্য নোটিফিকেশন গ্রহণ করেছে। দুই-তিন সেকেন্ডের মধ্যে না এলে ফোনের সেটিংস দেখুন।`
+            : "Firebase কোনো ফোনের জন্য নোটিফিকেশন গ্রহণ করেনি। কারণ নিচে দেখুন।",
+        detail: problems.length
+          ? problems
+              .map(
+                (item) =>
+                  `${item.label ?? "ফোন"} — ${TEST_OUTCOME_LABEL[item.outcome]}${
+                    item.error ? ` (${item.error})` : ""
+                  }`,
+              )
+              .join("\n")
+          : undefined,
+      });
+      void refresh();
+    } catch (caught) {
+      setTest({
+        ok: false,
+        at: new Date().toISOString(),
+        message:
+          caught instanceof Error
+            ? caught.message
+            : "টেস্ট নোটিফিকেশন পাঠানো যায়নি।",
+      });
+    } finally {
+      setTesting(false);
+    }
+  }, [testing, sendTest, refresh]);
 
   return (
     <ScrollView
@@ -65,6 +144,59 @@ export default function SettingsScreen() {
             onPress={() => void Linking.openSettings()}
           />
         </View>
+      </Card>
+
+      {/* ── the only way to tell "token exists" apart from "push arrives" ── */}
+      <Card>
+        <View style={styles.titleRow}>
+          <Send size={16} color={colors.slate[700]} />
+          <Text style={styles.cardTitle}>টেস্ট নোটিফিকেশন</Text>
+        </View>
+        <Muted>
+          সার্ভারকে বলে এই অ্যাকাউন্টের নিবন্ধিত ফোনে এখনই একটি নোটিফিকেশন পাঠাতে।
+          এটি আপনার নিজের ফোনেই যাবে — অন্য কারো নয়।
+        </Muted>
+
+        <View style={styles.testButtonWrapper}>
+          <PrimaryButton
+            label={testing ? "পাঠানো হচ্ছে..." : "টেস্ট নোটিফিকেশন পাঠান"}
+            icon={Send}
+            loading={testing}
+            disabled={testing}
+            onPress={() => void runTest()}
+          />
+        </View>
+
+        {test ? (
+          <View
+            style={[
+              test.ok ? styles.okBox : styles.warnBox,
+              styles.testResultBox,
+            ]}
+          >
+            {test.ok ? (
+              <CheckCircle2 size={16} color={colors.emerald[700]} />
+            ) : (
+              <XCircle size={16} color={colors.amber[700]} />
+            )}
+            <View style={styles.testResultText}>
+              <Text style={test.ok ? styles.okText : styles.warnText}>
+                {test.message}
+              </Text>
+              {test.detail ? (
+                <Text style={styles.testDetail}>{test.detail}</Text>
+              ) : null}
+              <Text style={styles.testTimestamp}>
+                সর্বশেষ টেস্ট: {formatDateTime(test.at)}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <Text style={styles.testHint}>
+            এখনো টেস্ট করা হয়নি। টোকেন থাকা আর নোটিফিকেশন আসা এক জিনিস নয় — সেটি
+            আলাদা করে দেখতে এই বোতামটি চাপুন।
+          </Text>
+        )}
       </Card>
 
       {/* ── server-side push state: the usual reason push silently does nothing ── */}
@@ -94,11 +226,13 @@ export default function SettingsScreen() {
               <View style={styles.warnBox}>
                 <AlertTriangle size={16} color={colors.amber[700]} />
                 <Text style={styles.warnText}>
-                  সার্ভারে Firebase Admin কী সেট করা নেই, তাই এখন কোনো পুশ পাঠানো
-                  যাবে না। অ্যাডমিন ড্যাশবোর্ড ঠিকঠাক কাজ করবে।
                   {data.missingServerKeys.length > 0
-                    ? ` অনুপস্থিত: ${data.missingServerKeys.join(", ")}`
+                    ? `সার্ভারে Firebase Admin কী সেট করা নেই, তাই এখন কোনো পুশ পাঠানো যাবে না। অনুপস্থিত: ${data.missingServerKeys.join(", ")}`
+                    : "সার্ভারে Firebase Admin কী আছে, কিন্তু সেটি ব্যবহার করা যাচ্ছে না, তাই এখন কোনো পুশ পাঠানো যাবে না।"}
+                  {data.pushConfigIssue
+                    ? `\nকারণ: ${PUSH_ISSUE_LABEL[data.pushConfigIssue.code]} (${data.pushConfigIssue.detail})`
                     : ""}
+                  {"\n"}অর্ডার ও অ্যাডমিন ড্যাশবোর্ড স্বাভাবিকভাবেই কাজ করবে।
                 </Text>
               </View>
             )}
@@ -178,11 +312,20 @@ export default function SettingsScreen() {
           ১. লগইন করা অবস্থায় ফোনটি নিবন্ধিত হয়েছে কিনা উপরে দেখুন।
         </Text>
         <Text style={styles.helpText}>
-          ২. ওয়েবসাইটে একটি টেস্ট অর্ডার দিন। সাথে সাথে এই ফোনে নোটিফিকেশন আসবে —
-          অ্যাপ বন্ধ থাকলেও।
+          ২. উপরের “টেস্ট নোটিফিকেশন পাঠান” চাপুন। নোটিফিকেশন আসলে সার্ভার থেকে
+          ফোন পর্যন্ত পুরো পথ ঠিক আছে।
         </Text>
         <Text style={styles.helpText}>
-          ৩. নোটিফিকেশনে ট্যাপ করলে সরাসরি সেই অর্ডারের বিবরণ খুলবে।
+          ৩. এরপর ওয়েবসাইটে (বা অ্যাপের “ম্যানুয়াল অর্ডার”) একটি আসল অর্ডার দিন —
+          অ্যাপ বন্ধ থাকলেও নোটিফিকেশন আসবে।
+        </Text>
+        <Text style={styles.helpText}>
+          ৪. নোটিফিকেশনে ট্যাপ করলে সরাসরি সেই অর্ডারের বিবরণ খুলবে।
+        </Text>
+        <Text style={styles.helpText}>
+          ৫. নোটিফিকেশন না এলে: ফোনের সেটিংস → অ্যাপ → Fiber Mesh Lead →
+          নোটিফিকেশন চালু আছে কিনা, এবং ফোনে ব্যাটারি সেভার/Doze চালু আছে কিনা
+          দেখুন।
         </Text>
       </Card>
 
@@ -282,6 +425,22 @@ const styles = StyleSheet.create({
     marginTop: space.md,
   },
   refreshRow: { marginTop: space.md },
+
+  testButtonWrapper: { marginTop: space.md },
+  testResultBox: { marginTop: space.md },
+  testResultText: { flex: 1, gap: 4 },
+  testDetail: {
+    fontSize: typography.size.xs,
+    color: colors.slate[600],
+    lineHeight: 18,
+  },
+  testTimestamp: { fontSize: typography.size.xs, color: colors.slate[400] },
+  testHint: {
+    marginTop: space.md,
+    fontSize: typography.size.sm,
+    color: colors.slate[600],
+    lineHeight: 20,
+  },
 
   okBox: {
     flexDirection: "row",

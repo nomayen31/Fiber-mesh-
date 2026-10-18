@@ -1,9 +1,13 @@
 import type { NextRequest } from "next/server";
-import { jsonError, jsonOk, rateLimit } from "@/lib/api";
+import { jsonError, jsonOk, logError, rateLimit } from "@/lib/api";
 import { getAdminSessionFromRequest } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { enabledEvents } from "@/lib/notifications/config";
-import { isPushConfigured, missingPushEnvKeys } from "@/lib/notifications/firebase-admin";
+import {
+  isPushConfigured,
+  missingPushEnvKeys,
+  pushConfigIssue,
+} from "@/lib/notifications/firebase-admin";
 import { deviceRegisterSchema, fieldErrors } from "@/lib/validators";
 
 export const runtime = "nodejs";
@@ -71,10 +75,16 @@ export async function GET(request: NextRequest) {
       /** Lets the app explain *why* no push arrives. */
       pushConfigured: isPushConfigured(),
       missingServerKeys: missingPushEnvKeys(),
+      /**
+       * A sanitized reason when `pushConfigured` is false even though no key is
+       * missing — i.e. the variable is set but unusable (`missing-fields`,
+       * `invalid-json`, `invalid-private-key`, `init-failed`). Field names only.
+       */
+      pushConfigIssue: pushConfigIssue(),
       enabledEvents: enabledEvents(),
     });
   } catch (error) {
-    console.error("[api/admin/devices] list failed:", error);
+    logError("[api/admin/devices] list failed:", error);
     return jsonError("ডিভাইসের তালিকা আনা যায়নি।", 500);
   }
 }
@@ -150,7 +160,7 @@ export async function POST(request: NextRequest) {
 
     return jsonOk({ ok: true, device: present(device) });
   } catch (error) {
-    console.error("[api/admin/devices] register failed:", error);
+    logError("[api/admin/devices] register failed:", error);
     return jsonError("ডিভাইস নিবন্ধন করা যায়নি।", 500);
   }
 }
@@ -183,7 +193,7 @@ export async function DELETE(request: NextRequest) {
     });
     return jsonOk({ ok: true });
   } catch (error) {
-    console.error("[api/admin/devices] unregister failed:", error);
+    logError("[api/admin/devices] unregister failed:", error);
     return jsonError("ডিভাইস নিবন্ধন বাতিল করা যায়নি।", 500);
   }
 }

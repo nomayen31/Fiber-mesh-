@@ -53,6 +53,10 @@ function RootNavigator() {
           name="order/[id]"
           options={{ title: "অর্ডার বিবরণ", headerBackTitle: "ফিরে যান" }}
         />
+        <Stack.Screen
+          name="manual-order"
+          options={{ title: "ম্যানুয়াল অর্ডার যোগ করুন", headerBackTitle: "ফিরে যান" }}
+        />
       </Stack.Protected>
 
       <Stack.Protected guard={!signedIn}>

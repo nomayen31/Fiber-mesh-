@@ -107,15 +107,48 @@ filter-aware `filteredRevenue` / `filteredRolls` that the list header shows.
 { "error": "অর্ডার পাওয়া যায়নি।" }
 ```
 
-This is the **only** backend endpoint added for the mobile app, and it is purely
-additive — `PATCH` and `DELETE` on the same path are untouched. The web dashboard
-never needed it because it renders rows straight from the list response; the app
-needs it because a notification carries only an order id and the detail screen
-must fetch the rest.
+This endpoint is purely additive — `PATCH` and `DELETE` on the same path are
+untouched. The web dashboard never needed it because it renders rows straight from
+the list response; the app needs it because a notification carries only an order id
+and the detail screen must fetch the rest.
 
 `getOrderById()` hydrates dates to ISO strings exactly like `listOrders()` does,
 so both clients receive the identical shape and there is no second serialisation
 format to keep in sync.
+
+### `POST /api/admin/orders` — one order, entered by hand
+
+**This endpoint already existed for the web dashboard.** The Android app's manual
+order screen calls it; no second order endpoint and no second order table was
+created, so pricing, validation and the notification pipeline are shared.
+
+```jsonc
+// request — the app sends the price the *server* quoted from GET /api/admin/meta
+{
+  "customerName": "…", "phone": "01711223344", "district": "Feni",
+  "address": "…", "productSlug": "big-roll", "unitPrice": 2500,
+  "quantity": 5, "applyBulkDiscount": true,
+  "status": "PENDING", "source": "MANUAL", "note": ""
+}
+
+// 201
+{ "ok": true, "order": { "id": "…", "orderNo": "FM-20261018-0005", "total": 36750, … } }
+```
+
+- `createManualOrder()` **recomputes** subtotal, discount and total from
+  `unitPrice × quantity` plus the bulk tiers. The client's arithmetic is a preview;
+  the server's result is authoritative and is what gets stored.
+- `unitPrice: 0` with a valid `productSlug` means *"use the catalogue price"*, which
+  is resolved from the database.
+- `productName` is snapshotted at creation time, so a later catalogue rename does
+  not rewrite history.
+- `source` defaults to `MANUAL`; `status` defaults to `COMPLETED` on the web form,
+  while the app sends `PENDING` explicitly because a hand-entered lead is usually
+  not yet confirmed.
+- A successful create queues an `order.created` job — the same path the website
+  uses, so a manual order notifies exactly like a customer order.
+- `tests/manual-order.test.ts` and `tests/integration.manual-order.ts` cover the
+  payload, the server-side pricing, and the queue → `SENT` path.
 
 ### `PATCH /api/admin/orders/:id` — change status
 
@@ -179,6 +212,7 @@ Settings tab is built on it.
   "devices": [ { "id", "platform", "label", "isActive", "lastSeenAt", "tokenPreview" } ],
   "pushConfigured": true,
   "missingServerKeys": [],
+  "pushConfigIssue": null,
   "enabledEvents": ["order.created", "inquiry.created"]
 }
 ```
@@ -186,6 +220,73 @@ Settings tab is built on it.
 `missingServerKeys` lists **variable names only** — never a value. It is what lets
 the app say *"the server is missing FIREBASE_PRIVATE_KEY"* instead of leaving you
 to guess why nothing arrives.
+
+`pushConfigIssue` is the companion field, and it exists because `missingServerKeys`
+alone could give a **false all-clear**: it is empty whenever the variable is present,
+even if the value is unusable. That was a real outage — see
+`docs/SECURITY_AUDIT.md`, finding A-01.
+
+```jsonc
+// null when push works; otherwise a fixed code plus field NAMES only
+"pushConfigIssue": { "code": "missing-fields", "detail": "missing: private_key" }
+```
+
+| `code` | Meaning |
+|---|---|
+| `no-credentials` | Nothing is set — the same case `missingServerKeys` reports. |
+| `invalid-json` | Neither JSON nor base64-encoded JSON. |
+| `missing-fields` | Valid JSON, a required field is absent; `detail` names it. |
+| `invalid-private-key` | `private_key` is not a PEM block. |
+| `init-failed` | The Admin SDK rejected the credential. |
+
+### `POST /api/admin/notifications/test` — send a test push to your own phone
+
+Added for the app's Settings tab and useful for support. Requires a session.
+
+```jsonc
+// request — the body is optional
+{ "deviceId": "…" }        // used only as an extra filter
+
+// 200
+{
+  "ok": true,
+  "pushConfigured": true,
+  "results": [ { "deviceId": "…", "tokenPreview": "••••a1b2c3",
+                 "outcome": "sent" | "invalid-token" | "failed" | "skipped" } ]
+}
+
+// 503 — the server has no usable credential
+{ "error": "…(Bengali explanation)…", "pushConfigured": false,
+  "missingServerKeys": [], "pushConfigIssue": { … } }
+```
+
+- The target is resolved from the **verified session** (`session.sub`) only. An
+  attacker cannot use it to push to someone else's device, and `deviceId` narrows
+  the selection rather than choosing it.
+- Rate limited to **5 attempts per 10 minutes per session**.
+- The payload is **fixed and PII-free** — no order, no customer data.
+- It creates **no `NotificationJob`**, so a test cannot pollute the real delivery
+  history or the retry queue.
+- The response contains only sanitized outcome codes; a dead token is deactivated
+  immediately.
+
+### `GET /api/admin/meta` — reference data for the manual-order form
+
+Added so the phone never hardcodes the catalogue or the district list.
+
+```jsonc
+{
+  "ok": true,
+  "districts": [ { "value": "Feni", "label": "ফেনী", "division": "Chattogram",
+                   "delivery": 100 } ],
+  "products":  [ { "slug": "big-roll", "name": "বিগ রোল (Big Roll) — ৫০ × ১ মিটার",
+                   "nameEn": "Big Roll", "gsm": 50, "price": 2500, "unit": "রোল" } ]
+}
+```
+
+`price` is **the server's price**. The manual-order form sends that value back, so
+the server can recompute the order from the same number the admin saw, and the
+client-side total is a preview only. Only active products are returned.
 
 **`DELETE /api/admin/devices?id=<id>` or `?token=<fcm token>`**
 
@@ -380,13 +481,14 @@ Nothing existing was altered or dropped.
 
 | Name | Required | Default | Purpose |
 |---|---|---|---|
-| `FIREBASE_SERVICE_ACCOUNT_JSON` | for push | — | full service-account JSON, raw or base64. **Preferred.** |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | for push | — | full service-account JSON, raw or base64. **Preferred.** Accepts the snake_case keys Firebase writes (`project_id`, `client_email`, `private_key`) and camelCase. |
 | `FIREBASE_PROJECT_ID` | alternative | — | used only if the blob above is absent; all three are then required |
 | `FIREBASE_CLIENT_EMAIL` | alternative | — | ditto |
-| `FIREBASE_PRIVATE_KEY` | alternative | — | ditto; literal `\n` is converted to real newlines |
+| `FIREBASE_PRIVATE_KEY` | alternative | — | ditto; literal `\n` and real newlines are both accepted |
 | `CRON_SECRET` | optional | — | enables `/api/cron/notifications`; unset ⇒ 503 |
 | `NOTIFY_EVENTS` | optional | `order.created,inquiry.created` | `none` disables everything |
 | `MOBILE_SESSION_MAX_AGE_SECONDS` | optional | `2592000` (30 days) | app token lifetime, clamped to 90 days |
+| `AUTH_SECRET` | **required in production** | dev fallback | signs the admin session. In production the app refuses to sign or verify a session if this is unset, still the built-in development fallback, or shorter than 32 characters. |
 
 Every one of these is optional in the sense that the website runs fine without
 it — push simply stays disabled and says so.

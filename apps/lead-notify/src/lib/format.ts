@@ -242,3 +242,50 @@ export function shortProductName(name: string): string {
   const cut = name.split("—")[0]?.split("(")[0]?.trim();
   return cut && cut.length > 0 ? cut : name;
 }
+
+/* ───────────────────────────── pricing ───────────────────────────── */
+
+/**
+ * Verbatim port of `bulkDiscountTiers` from `src/content/products.ts`.
+ * Order matters: the first tier whose `minQty` is reached wins, so the list is
+ * written largest-first.
+ */
+export const BULK_DISCOUNT_TIERS = [
+  { minQty: 25, percent: 10 },
+  { minQty: 10, percent: 5 },
+  { minQty: 5, percent: 2 },
+] as const;
+
+export type PriceBreakdown = {
+  unitPrice: number;
+  quantity: number;
+  subtotal: number;
+  discountPercent: number;
+  discount: number;
+  total: number;
+};
+
+/**
+ * Port of `priceFor()` in `src/lib/utils.ts`.
+ *
+ * This is used **only to preview** the total while the form is being filled in.
+ * The submitted `unitPrice`/`quantity` are recomputed by the server with this
+ * same function, and the server's answer is what gets stored — so the preview
+ * can be wrong for a moment but the saved order never can be.
+ */
+export function priceFor(unitPrice: number, quantity: number): PriceBreakdown {
+  const qty = Math.max(1, Math.floor(quantity));
+  const subtotal = unitPrice * qty;
+  const tier = BULK_DISCOUNT_TIERS.find((item) => qty >= item.minQty);
+  const discountPercent = tier?.percent ?? 0;
+  const discount = Math.round((subtotal * discountPercent) / 100);
+  return {
+    unitPrice,
+    quantity: qty,
+    subtotal,
+    discountPercent,
+    discount,
+    total: subtotal - discount,
+  };
+}
+

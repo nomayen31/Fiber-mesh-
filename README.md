@@ -82,8 +82,13 @@ notification the moment a new order or message arrives.
 * **Order detail** — full customer and pricing breakdown, one-tap **call** / **WhatsApp** / **copy
   phone number**, and a status changer.
 * **Messages** — customer inquiries with read/unread, marking read as you open them.
-* **Settings** — whether *this phone* is registered for push, whether the *server* has its Firebase
-  credentials, which phones are registered, and logout (which stops the pushes).
+* **Manual order entry** — **"ম্যানুয়াল অর্ডার যোগ করুন"** on the Orders and Overview screens: enter a
+  phone lead by hand, pick the product and district from the live catalogue, and get the same
+  server-side pricing and validation (and the same `order.created` notification) as a website order.
+  The total shown while typing is a preview; the server recomputes and stores the real one.
+* **Settings** — whether *this phone* is registered for push, whether the *server* has usable Firebase
+  credentials (and if not, **why**), which phones are registered, a **test notification** button that
+  pushes to this phone only, and logout (which stops the pushes).
 * Built with Expo SDK 58 / React Native, distributed as a sideloadable **APK** (not on the Play
   Store), and styled with the same brand colours and Bengali-only typography rules as the website.
 
@@ -103,6 +108,12 @@ See [`docs/MOBILE_APP_SETUP.md`](docs/MOBILE_APP_SETUP.md) and
   rendered on a locked screen.
 * **Degrades quietly** — with no Firebase credentials the website, dashboard and app all work
   normally; deliveries are just recorded as `SKIPPED`.
+* **Explains itself when it is off** — `GET /api/admin/devices` (and the app's Settings tab) report a
+  sanitized reason: a missing variable *name*, or a `pushConfigIssue` code such as `missing-fields`,
+  so a broken credential can never look like a working one.
+* **Never logs a secret** — every API failure goes through `logError()`, which scrubs PEM blocks, JWTs,
+  `Bearer` credentials, `AIza…` keys, credential-bearing `postgres://` URLs and long base64 runs
+  (service-account blobs, FCM tokens) before anything is written.
 
 See [`docs/API_INTEGRATION.md`](docs/API_INTEGRATION.md) and
 [`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md).
@@ -119,6 +130,7 @@ See [`docs/API_INTEGRATION.md`](docs/API_INTEGRATION.md) and
 | [`docs/API_INTEGRATION.md`](docs/API_INTEGRATION.md) | Every endpoint, auth, push payloads, delivery guarantees, env vars |
 | [`docs/APK_BUILD_AND_INSTALL.md`](docs/APK_BUILD_AND_INSTALL.md) | Building the APK with EAS, installing it, rebuilding |
 | [`docs/TESTING_CHECKLIST.md`](docs/TESTING_CHECKLIST.md) | Automated results + the manual steps only a real phone can verify |
+| [`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md) | Full repository security audit: findings, fixes, open risks, and what could not be verified |
 
 ---
 
@@ -276,12 +288,16 @@ Bengali via `districtLabel()`. Change a delivery time in one place and all of th
 | `npm run db:migrate` | `prisma migrate dev` — create + apply a new migration (needs `DATABASE_URL_UNPOOLED`). |
 | `npm run db:deploy` | `prisma migrate deploy` — apply pending migrations (CI / production). |
 | `npm run db:push` | Push the schema without creating a migration file. |
-| `npm run db:seed` | Upsert the 4-product catalogue from `src/content/products.ts`. Idempotent. |
+| `npm run db:seed` | Upsert the 2-product catalogue from `src/content/products.ts`. Idempotent. |
 | `npm run db:studio` | Prisma Studio. |
 | `npm run db:reset` | Drop, re-migrate and re-seed. **Destructive.** |
-| `npm test` | Unit tests for the notification pipeline (no DB, no network). |
+| `npm test` | 79 unit tests for the pipeline, the manual-order payload, credential parsing and log scrubbing (no DB, no network). |
 | `npm run test:integration` | DB-backed notification checks against the real database. Self-cleaning. |
-| `npm run verify:push` | Production smoke test of the push endpoints over the network. Creates and removes its own rows. Optional — never run by `npm test`. |
+| `npm run test:integration:manual` | DB-backed manual-order / server-pricing checks. Self-cleaning. |
+| `npm run verify:push` | Production smoke test of the push endpoints over the network. Creates and removes its own rows. Optional - never run by `npm test`. |
+| `npx tsx scripts/inspect-orders.ts` | Read-only: recent orders and inquiries, with phone numbers masked. |
+| `npx tsx scripts/inspect-devices.ts` | Read-only: registered phones (token preview only) and notification-job counts by status. |
+| `node scripts/diagnose-firebase-env.mjs` | Read-only: reports the **shape** of the Firebase env vars (never their values) and what the credential reader makes of them. |
 
 Products are read from the database, but if the table is empty or unreachable the site falls back
 to the static catalogue in `src/content/products.ts`, so the page never renders blank.
@@ -391,6 +407,7 @@ src/
     notifications/    push pipeline: config, payload, firebase-admin, sender,
                       store, dispatch, schedule
     auth.ts / session.ts / validators.ts / api.ts / utils.ts / types.ts
+    sanitize.ts  credential scrubber shared by logError() and lastError
   middleware.ts              edge guard for /admin and /api/admin
 
 apps/lead-notify/            standalone Expo/React Native Android app.
@@ -398,10 +415,15 @@ apps/lead-notify/            standalone Expo/React Native Android app.
                              root tsconfig and from Vercel uploads.
 docs/                        FIREBASE_SETUP, MOBILE_APP_SETUP, API_INTEGRATION,
                              APK_BUILD_AND_INSTALL, TESTING_CHECKLIST,
-                             IMPLEMENTATION_PLAN
+                             SECURITY_AUDIT, IMPLEMENTATION_PLAN
 tests/
   notifications.test.ts        unit tests            → npm test
+  manual-order.test.ts         form payload + guards → npm test
+  firebase-config.test.ts      credential parsing    → npm test
+  firebase-config-broken.test.ts  diagnostics        → npm test
+  sanitize.test.ts             secret scrubbing      → npm test
   integration.notifications.ts DB-backed checks      → npm run test:integration
+  integration.manual-order.ts  DB-backed manual order → npm run test:integration:manual
   helpers/                     in-memory store + stub sender
 ```
 
@@ -465,16 +487,18 @@ Notes:
 | `GET` | `/api/admin/session` | current auth state |
 | `GET` | `/api/admin/stats?range=7d\|30d\|90d` | cards, series, breakdowns, top products |
 | `GET` | `/api/admin/orders?q=&status=&source=&page=&pageSize=` | paginated list + filtered revenue |
-| `POST` | `/api/admin/orders` | manual order (any `OrderSource`) |
+| `POST` | `/api/admin/orders` | manual order (any `OrderSource`); server recomputes pricing. Used by the app's manual-order form |
 | `GET` | `/api/admin/orders/:id` | one order (added for the app's detail screen) |
 | `PATCH` | `/api/admin/orders/:id` | `{ status }` |
 | `DELETE` | `/api/admin/orders/:id` | delete |
 | `GET` | `/api/admin/inquiries?page=&pageSize=&q=&unread=1` | list |
 | `PATCH` | `/api/admin/inquiries/:id` | `{ isRead }` |
 | `GET` | `/api/admin/export?type=orders\|inquiries` | UTF-8 BOM CSV download |
-| `GET` | `/api/admin/devices` | registered phones + `pushConfigured` + `missingServerKeys` |
+| `GET` | `/api/admin/meta` | districts + active products with **server** prices (for the app's manual-order form) |
+| `GET` | `/api/admin/devices` | registered phones + `pushConfigured` + `missingServerKeys` + `pushConfigIssue` |
 | `POST` | `/api/admin/devices` | `{ token, platform, label? }` — register/refresh this phone |
 | `DELETE` | `/api/admin/devices?id=\|?token=` | deactivate this phone's registration |
+| `POST` | `/api/admin/notifications/test` | send a test push to **your own** devices (`deviceId?` narrows it further); rate limited 5/10 min; creates no `NotificationJob` |
 
 An `Authorization` header, when present, is authoritative: an invalid bearer is rejected with `401`
 and never silently falls back to the cookie session.
@@ -557,11 +581,25 @@ npm start          # PORT=3000 by default
   falls back to the cookie session.
 * The Firebase Admin service account is server-only. It is read exclusively by
   `src/lib/notifications/firebase-admin.ts`, which throws if it is ever evaluated in a browser
-  bundle, and the API only ever reports *which variable names are missing* — never a value.
+  bundle, and the API only ever reports *which variable names are missing* — never a value. When the
+  credential is present but unusable, a sanitized `pushConfigIssue` (a fixed code plus field
+  **names**) explains why, so a broken credential can never look like a working one.
+* **Logs never carry a secret.** Every API failure goes through `logError()`, which runs the value
+  through `src/lib/sanitize.ts` first — PEM blocks, JSON `private_key` fields, JWTs, `Bearer`
+  credentials, `AIza…` keys, credential-bearing `postgres://` URLs and long base64 runs
+  (service-account blobs, FCM tokens) become a fixed label, on a single clamped line. The same
+  scrubber backs `NotificationJob.lastError`.
 * Push payloads contain **no customer PII**: just the order number, product, quantity and total.
   A notification is visible on a locked screen, so it is treated as public. Name, phone and address
   are fetched from the authenticated API after a tap.
+* **`AUTH_SECRET` is required in production.** If it is unset, still the built-in development
+  fallback, or shorter than 32 characters, the app refuses to sign or verify an admin session when
+  `NODE_ENV=production`, instead of falling back to a signing key that is published in this
+  repository.
 * **Change `ADMIN_PASSWORD` and `AUTH_SECRET` before going live.**
+
+The full audit — findings, fixes, open risks, and what could not be verified — is in
+[`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md).
 
 ---
 
@@ -574,7 +612,7 @@ npm start          # PORT=3000 by default
 | Bengali shows as mojibake in Excel | Open the exported CSV via Excel's *Data → From Text/CSV* with UTF-8 selected, or use Google Sheets. The file already carries a UTF-8 BOM. |
 | Admin login loops back to `/admin/login` | `AUTH_SECRET` changed since the cookie was issued, or the cookie was blocked. Clear cookies and sign in again. |
 | Site shows products you deleted from the DB | The static catalogue in `src/content/products.ts` is the fallback; re-check that the `Product` table actually has rows. |
-| The app registers but no notification ever arrives | Check the app's **সেটিংস** tab first — it names the problem. Usually either `FIREBASE_SERVICE_ACCOUNT_JSON` is unset (`pushConfigured: false`), `NOTIFY_EVENTS=none`, or the notification type is switched off. |
+| The app registers but no notification ever arrives | Check the app's **সেটিংস** tab first — it names the problem. Either no credential is set (`pushConfigured: false` with `missingServerKeys` listing names), or the credential **is** set but unusable (`pushConfigIssue`, e.g. `missing-fields`), or `NOTIFY_EVENTS=none`, or the notification type is switched off. Then tap **টেস্ট নোটিফিকেশন → পাঠান** to round-trip a real push to this phone without creating an order. |
 | The **APK** build fails with a missing-file error | `apps/lead-notify/google-services.json` is required **at build time**. See [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md) Part A. |
 | Push works when the app is open but not when it is closed | The APK was built without the Firebase SDK — `google-services.json` must exist when EAS builds, not just when you run the app. |
 
@@ -582,17 +620,21 @@ npm start          # PORT=3000 by default
 
 ## Sample data
 
-The database currently holds the **2 real products** and **1 real customer order**
-(`FM-20261018-0001`, placed through the live site while testing). **Do not delete
-that order** — it is a genuine record, not test data.
+The database currently holds the **2 real products**, **4 orders** and **1 inquiry**.
+Only one order is a genuine customer order — `FM-20261018-0001`, placed through the
+live site while testing. **Do not delete that order**; it is a real record. The other
+three (`FM-20261018-0002` … `0004`) were placed through the website on 18 Oct 2026 with
+obvious placeholder notes and are awaiting a decision on whether to keep or remove
+them. The single inquiry arrived through the public contact form.
 
-The notification integration tests create their own marker-scoped rows
-(`NOTIFYTEST-…`) and delete exactly what they created, so they never touch real
-data. Both suites are safe to run at any time:
+The notification and manual-order integration tests create their own marker-scoped
+rows (`NOTIFYTEST-…` / `MANUALTEST-…`) and delete exactly what they created, so they
+never touch real data. Both suites are safe to run at any time:
 
 ```bash
-npm test                 # 26 unit tests, no database involved
-npm run test:integration # 24 checks against the real database, self-cleaning
+npm test                          # 79 unit tests, no database involved
+npm run test:integration          # 24 checks against the real database, self-cleaning
+npm run test:integration:manual   # 18 checks, also self-cleaning
 ```
 
 Inspect the tables directly with:

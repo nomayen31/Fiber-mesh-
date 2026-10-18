@@ -11,13 +11,14 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Inbox, MapPin, Search, X } from "lucide-react-native";
+import { Inbox, MapPin, PlusCircle, Search, X } from "lucide-react-native";
 
 import {
   Card,
   EmptyState,
   ErrorNotice,
   LoadingState,
+  PrimaryButton,
   StatusBadge,
 } from "@/components/ui";
 import { usePush } from "@/components/NotificationBridge";
@@ -147,6 +148,13 @@ export default function OrdersScreen() {
 
   const header = (
     <View style={styles.header}>
+      {/* The website's manual-order form, as a native screen. */}
+      <PrimaryButton
+        label="ম্যানুয়াল অর্ডার যোগ করুন"
+        icon={PlusCircle}
+        onPress={() => router.push("/manual-order")}
+      />
+
       <View style={styles.searchWrapper}>
         <Search size={16} color={colors.slate[400]} />
         <TextInput

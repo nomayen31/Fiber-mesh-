@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { getClientIp, jsonError, jsonOk, rateLimit } from "@/lib/api";
+import { getClientIp, jsonError, jsonOk, logError, rateLimit } from "@/lib/api";
 import { checkAdminPassword, startAdminSession } from "@/lib/auth";
 import { fieldErrors, loginSchema } from "@/lib/validators";
 
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   try {
     valid = checkAdminPassword(parsed.data.password);
   } catch (error) {
-    console.error("[api/admin/login]", error);
+    logError("[api/admin/login]", error);
     return jsonError(
       "সার্ভারে ADMIN_PASSWORD সেট করা হয়নি। .env ফাইল দেখুন।",
       500,

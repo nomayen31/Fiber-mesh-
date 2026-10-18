@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { getClientIp, jsonError, jsonOk, rateLimit } from "@/lib/api";
+import { getClientIp, jsonError, jsonOk, logError, rateLimit } from "@/lib/api";
 import { createWebsiteOrder } from "@/lib/orders";
 import { queueOrderNotification } from "@/lib/notifications/dispatch";
 import { scheduleDispatch } from "@/lib/notifications/schedule";
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message === "PRODUCT_NOT_FOUND") {
       return jsonError("নির্বাচিত পণ্যটি পাওয়া যায়নি।", 404);
     }
-    console.error("[api/orders] failed to create order:", error);
+    logError("[api/orders] failed to create order:", error);
     return jsonError(
       "দুঃখিত, অর্ডারটি সংরক্ষণ করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন বা ফোন করুন।",
       500,

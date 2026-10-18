@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { jsonError, jsonOk } from "@/lib/api";
+import { jsonError, jsonOk, logError } from "@/lib/api";
 import { bearerTokenFrom, safeEqual } from "@/lib/session";
 import { dispatchPendingJobs } from "@/lib/notifications/dispatch";
 import { isPushConfigured } from "@/lib/notifications/firebase-admin";
@@ -63,7 +63,7 @@ async function handle(request: NextRequest) {
       summaries: result.summaries,
     });
   } catch (error) {
-    console.error("[api/cron/notifications] failed:", error);
+    logError("[api/cron/notifications] failed:", error);
     return jsonError("রিট্রাই চালানো যায়নি।", 500);
   }
 }

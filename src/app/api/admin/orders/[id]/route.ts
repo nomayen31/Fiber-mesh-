@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { guardAdmin, jsonError, jsonOk } from "@/lib/api";
+import { guardAdmin, jsonError, jsonOk, logError } from "@/lib/api";
 import { deleteOrder, getOrderById, updateOrderStatus } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
 import { queueOrderNotification } from "@/lib/notifications/dispatch";
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (!order) return jsonError("অর্ডার পাওয়া যায়নি।", 404);
     return jsonOk({ ok: true, order });
   } catch (error) {
-    console.error("[api/admin/orders/:id] read failed:", error);
+    logError("[api/admin/orders/:id] read failed:", error);
     return jsonError("অর্ডার আনা যায়নি।", 500);
   }
 }
@@ -81,7 +81,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     return jsonOk({ ok: true, order });
   } catch (error) {
-    console.error("[api/admin/orders/:id] update failed:", error);
+    logError("[api/admin/orders/:id] update failed:", error);
     return jsonError("স্ট্যাটাস আপডেট করা যায়নি।", 500);
   }
 }
@@ -97,7 +97,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     await deleteOrder(id);
     return jsonOk({ ok: true });
   } catch (error) {
-    console.error("[api/admin/orders/:id] delete failed:", error);
+    logError("[api/admin/orders/:id] delete failed:", error);
     return jsonError("অর্ডার ডিলিট করা যায়নি।", 500);
   }
 }

@@ -4,6 +4,12 @@ Two parts: what is **already verified by automated tests**, and what only
 **you** can verify by hand because it needs a real phone and a real Firebase
 project.
 
+> **Status at the time of writing (18 Oct 2026).** Part 1 is green except for one
+> deliberate failure in the production smoke test — see the note under
+> §"Production smoke test". **Nothing in Part 2 has been performed.** No
+> real-device result is claimed anywhere in these docs, including for the
+> notification flow, which is the whole point of Part 2.
+
 ---
 
 ## Part 1 — automated (already passing)
@@ -16,12 +22,13 @@ Run from the repository root.
 npm test
 ```
 
-**26/26 pass.** Covers `tests/notifications.test.ts` against an in-memory
+**79/79 pass, 18 suites.** Five files:
+
+**`tests/notifications.test.ts`** — the pipeline against an in-memory
 `NotificationStore` and a stub sender:
 
 - payload builders — Bengali titles, the order-number summary line, and that
-  **no customer PII** (`customerName`, `phone`, `address`) is ever put into a
-  push
+  **no customer PII** (`customerName`, `phone`, `address`) is ever put into a push
 - `eventKeyFor()` idempotency-key construction
 - the enqueue → dispatch → resolve lifecycle
 - duplicate enqueue returns `null` and sends nothing
@@ -33,14 +40,64 @@ npm test
   `PENDING`/`FAILED` jobs but never `SENT` ones
 - a `deactivateDevice` that throws does not lose the other devices' results
 - `NOTIFY_EVENTS` parsing, including the `none` kill switch and unknown values
+- **orphaned-job recovery.** A job left in `PROCESSING` by an instance that was
+  reclaimed mid-send is picked up again once it is older than
+  `STALE_PROCESSING_MS`; a *fresh* `PROCESSING` job is left alone so a live
+  dispatch is never raced. Before this, such a job was stranded forever.
+
+**`tests/manual-order.test.ts`** — the app's manual-order payload and the admin
+endpoint guards:
+
+- `adminOrderSchema` accepts exactly the payload the Android form builds
+- `source` defaults to `MANUAL`; `status` is whatever the form chose
+- `+880…`, `880…`, `01711-223344` and `01711 223 344` all normalise to `01711223344`
+- a non-Bangladeshi mobile, a bad district, a fractional price, `quantity: 0`,
+  `quantity: 10001` and over-long free text are all rejected
+- `priceFor()` bulk tiers at 4/5/9/10/24/25 units, integer rounding, quantity flooring
+- `POST /api/admin/orders`, `POST /api/admin/notifications/test` and
+  `GET /api/admin/meta` each return **401 without a session**
+- a **forged** bearer token is rejected and does **not** fall back to a cookie
+- anonymous error bodies contain no Firebase key material
+
+**`tests/firebase-config.test.ts`** — the regression suite for the credential bug:
+
+- a genuine **snake_case** service-account file (`project_id`, `client_email`,
+  `private_key`) parses — this is the case that was broken
+- camelCase still works
+- escaped `\n` and real newlines in `private_key` both normalise to a PEM block
+- the parsed parts are handed to the **real** `firebase-admin` `cert()` +
+  `getMessaging()` and the app initialises
+- `isPushConfigured()` is **`true`** with a well-formed credential
+
+A throwaway RSA key generated in-process is used throughout — no real credential
+is read, written or logged.
+
+**`tests/firebase-config-broken.test.ts`** — the diagnostic half, own process
+because the config is cached:
+
+- a credential that is *present but unusable* reports `pushConfigured: false`
+- `missingPushEnvKeys()` is **empty** (the variable exists) — which is exactly why
+  that field alone was misleading
+- `pushConfigIssue()` returns `{ code: "missing-fields", detail: "missing: private_key" }`
+  and contains no credential material
+
+**`tests/sanitize.test.ts`** — the credential scrubber:
+
+- PEM blocks, JSON `private_key` fields, JWTs, `Bearer`/`Basic` credentials,
+  `AIza…` keys, credential-bearing `postgres://` URLs and long base64 runs
+  (service-account blobs, FCM tokens) are all removed
+- ordinary Bengali and English text is untouched
+- output is single-line and clamped to 400 characters
+- a Prisma-style error that quotes a device token does not leak it
 
 ### Integration tests — against the real database
 
 ```powershell
-npm run test:integration
+npm run test:integration          # 24/24 pass
+npm run test:integration:manual   # 18/18 pass
 ```
 
-**24/24 pass.** `tests/integration.notifications.ts` exercises the actual Prisma
+**`tests/integration.notifications.ts` (24 checks)** exercises the actual Prisma
 store and schema:
 
 1. order creation produces exactly one job
@@ -56,22 +113,46 @@ store and schema:
 11. delivered jobs are not offered for retry
 12. **cleanup:** every test row is deleted — no leftover order, device or job
 
-> These tests run against the real production branch of the Neon database. They
-> are marker-scoped (`NOTIFYTEST-…` identifiers) and delete exactly what they
-> created in a `finally` block, and the run above confirms *"no test order left
-> behind / no test device left behind / no test job left behind"*.
->
-> Your genuine test order `FM-20261018-0001` is never touched by them.
+**`tests/integration.manual-order.ts` (18 checks)** covers the path the Android
+app uses end to end:
 
-### Type safety and build
+1. with `unitPrice: 0` and a slug, the **server** fills the price and product name
+   from the database — the phone cannot invent either
+2. the 5-unit bulk tier is applied server-side
+3. the stored row says `source = MANUAL` and `status = PENDING`
+4. the catalogue product is linked (`productId`)
+5. a manual order **queues a notification like any other order**, and the job
+   reaches `SENT` against a stub sender
+6. the push references the order number and carries **no phone number**
+7. the submitted customer name and normalised phone round-trip, and
+   `subtotal = unitPrice × quantity`
+8. **cleanup:** the test order, its device and its cascaded job are all gone, and
+   the real customer order `FM-20261018-0001` is confirmed untouched
+
+> These tests run against the real production branch of the Neon database. They
+> are marker-scoped (`NOTIFYTEST-…` / `MANUALTEST-…` identifiers) and delete
+> exactly what they created in a `finally` block. Both runs confirm *"no test
+> order left behind / no test device left behind / no test job left behind"*.
+>
+> They are written to tolerate a **real phone being registered** (one is), so the
+> assertions are scoped to the devices the test itself created.
+
+### Type safety, lint and build
 
 | Command | Where | Result |
 |---|---|---|
 | `npx tsc --noEmit` | repository root | passes |
-| `npm run build` | repository root | passes; all 23 routes compile |
+| `npm run build` | repository root | passes; all **25** routes compile |
 | `npx tsc --noEmit` | `apps/lead-notify/` | passes |
+| `npx eslint .` | `apps/lead-notify/` | **0 errors**, 11 warnings |
 | `npx expo-doctor` | `apps/lead-notify/` | **20/20 checks pass** |
 | `npx expo config --type public` | `apps/lead-notify/` | resolves cleanly |
+
+`expo lint` was not configured before this pass. It now is, and the 11 remaining
+warnings are React Compiler advisories (`set-state-in-effect`,
+`preserve-manual-memoization`, `refs`) that predate this work — the reasons are
+recorded in `apps/lead-notify/eslint.config.js`, and clearing them needs a
+data-fetching refactor (tracked in `docs/SECURITY_AUDIT.md`, §8).
 
 ### Production smoke test (opt-in, hits the live deployment)
 
@@ -80,32 +161,41 @@ npm run verify:push
 ```
 
 `scripts/verify-push.mjs` checks the **deployed** backend over the network against
-the real database — the parts unit and integration tests cannot reach. It waits
-for the new routes to go live, then verifies:
+the real database — the parts unit and integration tests cannot reach:
 
-- the app login issues a Bearer JWT, and a wrong password is `401`
-- the app login sets **no cookie**
+- the app login issues a Bearer JWT, a wrong password is `401`, and **no cookie**
+  is set
 - an **invalid bearer is `401`** and never silently falls back to a cookie session
 - the browser cookie session still works (the bearer change did not break it)
-- `GET /api/admin/devices` reports push state as a boolean, lists missing keys as
-  **names only**, and defaults to `order.created` + `inquiry.created`
+- `GET /api/admin/devices` reports push state, lists missing keys as **names
+  only**, and defaults to `order.created` + `inquiry.created`
+- **push is either working or explicitly explained** — the check that would have
+  caught the 18 October outage
+- any reported config issue names **fields only**, never a value
 - device registration returns a **masked preview** and never the full token
 - deactivation (the logout path) flips `isActive` to `false` rather than deleting
 - placing a real order commits **exactly one** `NotificationJob`, keyed
   `order.created:<orderId>`
 - **no customer name, phone or address appears** anywhere in the job's title,
   body or payload
-- the job settles out of `PENDING` rather than hanging
-- with no Firebase credentials it degrades to `SKIPPED`, never `FAILED`
-- `GET /api/admin/orders/:id` returns the order, with the same ISO date shape as
+- the job reaches a **terminal** status (`SENT` / `SKIPPED` / `FAILED`) rather
+  than sitting `PENDING` or `PROCESSING`
+- a job that cannot be delivered is `SKIPPED`, never `FAILED`
+- `GET /api/admin/orders/:id` returns the order with the same ISO date shape as
   the list endpoint, and `404` (not `500`) for a missing one
 - the public order response does **not** leak the internal id
 - `/api/cron/notifications` refuses an unauthenticated call
 - the genuine customer order is still present
+- **cleanup:** the test order, its cascaded job and the test device are all removed
 
-It is self-cleaning: the test order is deleted through the admin API (which
-cascades its job), the test device row is removed, and it fails loudly if
-anything is left behind.
+It is self-cleaning and fails loudly if anything is left behind.
+
+> **It currently reports 52 passed, 1 failed — and that failure is real.** Against
+> today's live deployment, `pushConfigured` is `false`, `missingServerKeys` is
+> empty, and there is no `pushConfigIssue`, so the new check *"push is either
+> working or explicitly explained"* fails. That is precisely the state described
+> in `docs/SECURITY_AUDIT.md` finding **A-01**, which the undeployed fix resolves.
+> Expect **53/53** once the fix is deployed.
 
 > Point it at a deployment deliberately — it is never part of `npm test`. When
 > targeting a deployed environment, `ADMIN_PASSWORD` must be **that
@@ -117,15 +207,24 @@ anything is left behind.
 
 ### Regression checks (nothing existing was broken)
 
-- `GET /api/admin/orders/:id` is **new**; `PATCH` and `DELETE` on that path are
-  unchanged and still return their original shapes.
-- `guardAdmin(request?)` keeps cookie authentication working for all six admin
-  routes — the browser path is untouched. The bearer branch only activates when
-  an `Authorization` header is present.
-- `POST /api/admin/login` and the website's `/admin` dashboard are unchanged.
-- The three new tables are additive; no existing table or column was altered.
-- `.vercelignore` and the root `tsconfig.json` `exclude` keep `apps/` out of the
-  web build entirely.
+- The manual-order feature **reuses** `POST /api/admin/orders`; no second order
+  endpoint, table or pricing implementation was added.
+- `GET /api/admin/orders/:id` is additive; `PATCH` and `DELETE` on that path are
+  unchanged.
+- `guardAdmin(request?)` keeps cookie authentication working for every admin
+  route — the bearer branch only activates when an `Authorization` header is
+  present.
+- `POST /api/admin/login`, `/api/admin/logout` and the website dashboard are
+  unchanged.
+- `GET /api/admin/devices` gained `pushConfigIssue`, which is **additive**; the
+  existing fields keep their names and shapes.
+- `listRetryableJobIds()` now also returns *stale* `PROCESSING` jobs. `PENDING`
+  and `FAILED` behaviour is unchanged, and a live `PROCESSING` job is still left
+  alone.
+- Every API route now logs through `logError()`. Status codes, response bodies and
+  `console` call sites are otherwise unchanged.
+- The three notification tables and the migration are additive; no existing table
+  or column was altered.
 
 ---
 
@@ -141,8 +240,11 @@ before it.
 - [ ] The same file is uploaded to EAS as the file-type variable
       `GOOGLE_SERVICES_JSON` (`npx eas-cli@latest env:list --environment preview`)
       — without it a cloud build has no Firebase config
-- [ ] `FIREBASE_SERVICE_ACCOUNT_JSON` is set in Vercel, and the project was
-      redeployed afterwards
+- [ ] `FIREBASE_SERVICE_ACCOUNT_JSON` is set in Vercel **and the project has been
+      redeployed since** — a running deployment does not pick up a new variable
+- [ ] `GET /api/admin/devices` now reports `pushConfigured: true` (see §1)
+- [ ] `AUTH_SECRET` is set for the environment you are deploying to — the app
+      refuses to sign an admin session without it when `NODE_ENV=production`
 - [ ] `NOTIFY_EVENTS` is unset, or explicitly
       `order.created,inquiry.created`
 - [ ] `CRON_SECRET` is set (optional, enables the retry endpoint)
@@ -165,6 +267,22 @@ before it.
 - [ ] Settings → **নিবন্ধিত ফোন** lists this phone as **সক্রিয়**
 - [ ] Kill and reopen the app → it stays logged in (the token persisted)
 
+### 2.3b The test-notification button (do this **before** §2.4)
+
+The fastest way to prove the server can reach this phone, without creating any
+order.
+
+- [ ] Settings → **টেস্ট নোটিফিকেশন** card → tap the button
+- [ ] A notification arrives saying **নোটিফিকেশন টেস্ট সফল হয়েছে** (or equivalent)
+- [ ] The result line beneath the button shows the Bengali wording for *sent*
+- [ ] Tap it **6 times within 10 minutes** → the 6th is refused with a rate-limit
+      message, not an error screen
+- [ ] Go to `/admin` → the order list is **unchanged** (the test creates no order,
+      no notification job and no delivery row)
+- [ ] If push is misconfigured, this card shows the reason instead: *"…সেট করা নেই"*
+      plus the missing variable names, or *"…আছে, কিন্তু সেটি ব্যবহার করা যাচ্ছে না"*
+      plus the `pushConfigIssue` code
+
 ### 2.4 A push actually arrives — the core test
 
 Do each of these three with a **fresh** order, checking the phone each time.
@@ -178,7 +296,9 @@ Tap **Allow** on any battery-optimisation prompt Android shows.
       place the order → notification still arrives
 
 All three matter. The server sends a notification message with
-`android.priority: "high"` so this should hold, but only a real phone proves it.
+`android.priority: "high"` and an explicit `android.notification.channelId`, so a
+background or terminated delivery should be displayed normally by the system — but
+only a real phone proves it.
 
 ### 2.5 Notification content and privacy
 
@@ -209,6 +329,36 @@ All three matter. The server sends a notification message with
 - [ ] If `order.confirmed` is enabled and you set an order to CONFIRMED, a push
       arrives; if it is disabled, none does *(both are correct)*
 
+### 2.7b Manual order creation from the phone
+
+This is the flow added for entering a phone lead by hand.
+
+- [ ] Orders tab (and the overview) show a **"ম্যানুয়াল অর্ডার যোগ করুন"** button
+- [ ] Tapping it opens the form; the **product picker** lists the live catalogue
+      with server prices (not a hardcoded list)
+- [ ] The **district picker** lists all 64 districts with Bengali names
+- [ ] Picking a product fills the price field automatically
+- [ ] Type a quantity of **10** → the preview shows the 5% bulk discount and the
+      recalculated total
+- [ ] Type a quantity of **25** → the preview shows 10%
+- [ ] Untick the bulk-discount switch → the preview returns to the plain subtotal
+- [ ] Enter a **wrong phone** (e.g. `01211223344`) → the form refuses it with a
+      Bengali message; nothing is submitted
+- [ ] Leave the name empty → same
+- [ ] Tap **সংরক্ষণ করুন** twice quickly → only **one** order is created (the
+      button disables while the request is in flight)
+- [ ] On success the app navigates to the **new order's detail screen** and shows a
+      success banner
+- [ ] The new order's **total on the detail screen** equals the number in
+      `/admin`, and equals the server's `unitPrice × quantity` with bulk discount
+      — the phone's preview was only a preview
+- [ ] The new order appears in `/admin/orders` with source **MANUAL**
+- [ ] Its status is **PENDING** (not `COMPLETED`)
+- [ ] **A notification arrives for it** — the manual path queues `order.created`
+      exactly like the website
+- [ ] Submit the same customer twice → two separate orders (there is no dedupe,
+      and that is intended)
+
 ### 2.8 The other screens
 
 - [ ] Overview: all stat tiles show plausible numbers matching `/admin`
@@ -230,6 +380,8 @@ All three matter. The server sends a notification message with
 
 - [ ] Place one order → exactly **one** notification, not two
 - [ ] Restart the app, place another order → still exactly one each
+- [ ] Create a manual order from the phone → exactly **one** notification, not one
+      from the phone and one from the server
 
 ### 2.11 Logout actually stops the notifications
 
@@ -253,6 +405,9 @@ All three matter. The server sends a notification message with
 - [ ] Turn airplane mode off → pull-to-refresh recovers
 - [ ] Revoke notification permission in Android settings, reopen the app →
       Settings reports *"অনুমতি দেওয়া হয়নি"* and explains how to fix it
+- [ ] While offline, open the manual-order form → it either uses the bundled
+      fallback data or reports clearly that it cannot load the catalogue; it must
+      **not** silently submit a stale price
 
 ### 2.14 The website still works
 
@@ -270,10 +425,11 @@ All three matter. The server sends a notification message with
 
 Worth stating explicitly rather than implying otherwise:
 
-- **FCM delivery itself.** No test can send a real push — that needs Firebase
-  credentials and a registered device. Sections 2.4–2.6 are the verification.
+- **FCM delivery itself.** No automated test sends a real push — that needs
+  Firebase credentials and a registered device. Sections 2.4–2.6 are the
+  verification, and they have **not** been run yet.
 - **The React Native UI.** There is no component-test or E2E suite. It is
-  type-checked and rendered on a device, nothing more.
+  type-checked, linted and rendered on a device, nothing more.
 - **Emulator behaviour.** Push needs a real device with Google Play services.
 - **Long-run token rotation.** FCM rotates registration tokens occasionally;
   `addPushTokenListener` re-registers automatically, but that path is hard to
@@ -282,3 +438,6 @@ Worth stating explicitly rather than implying otherwise:
   (Xiaomi, Huawei, Oppo) aggressively kill background apps. If terminated-state
   notifications are unreliable on one specific phone, disable battery
   optimisation for the app in its settings and retest before suspecting the code.
+- **An instance being reclaimed mid-dispatch.** The recovery path for an orphaned
+  `PROCESSING` job is unit-tested with a simulated stale timestamp; it has not
+  been reproduced against a real serverless freeze.

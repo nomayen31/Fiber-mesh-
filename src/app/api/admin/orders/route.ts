@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { guardAdmin, jsonError, jsonOk } from "@/lib/api";
+import { guardAdmin, jsonError, jsonOk, logError } from "@/lib/api";
 import { createManualOrder, listOrders } from "@/lib/orders";
 import { queueOrderNotification } from "@/lib/notifications/dispatch";
 import { scheduleDispatch } from "@/lib/notifications/schedule";
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     });
     return jsonOk(data);
   } catch (error) {
-    console.error("[api/admin/orders] list failed:", error);
+    logError("[api/admin/orders] list failed:", error);
     return jsonError("অর্ডার লিস্ট আনা যায়নি।", 500);
   }
 }
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     scheduleDispatch(jobId);
     return jsonOk({ ok: true, order }, 201);
   } catch (error) {
-    console.error("[api/admin/orders] manual create failed:", error);
+    logError("[api/admin/orders] manual create failed:", error);
     return jsonError("অর্ডার যোগ করা যায়নি।", 500);
   }
 }

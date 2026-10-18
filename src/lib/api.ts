@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getAdminSession, getAdminSessionFromRequest } from "@/lib/auth";
+import { safeErrorText } from "@/lib/sanitize";
 
 /** Small in-memory rate limiter (per process). Enough for form spam control. */
 const buckets = new Map<string, number[]>();
@@ -38,6 +39,18 @@ export function getClientIp(request: NextRequest): string {
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) return forwarded.split(",")[0]!.trim();
   return request.headers.get("x-real-ip") ?? "unknown";
+}
+
+/**
+ * The credential scrubber lives in `@/lib/sanitize` so there is exactly one
+ * implementation, importable from server and client code alike. Re-exported
+ * here so route handlers keep a single `@/lib/api` entry point.
+ */
+export { safeErrorText };
+
+/** Log a server-side failure without ever echoing a secret or a whole object. */
+export function logError(scope: string, error: unknown): void {
+  console.error(scope, safeErrorText(error));
 }
 
 export function jsonOk<T>(data: T, status = 200): NextResponse {

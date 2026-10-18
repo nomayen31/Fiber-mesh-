@@ -14,6 +14,7 @@ import {
   Clock,
   Mail,
   Package,
+  PlusCircle,
   RefreshCw,
   ShoppingCart,
   TrendingUp,
@@ -26,6 +27,7 @@ import {
   GhostButton,
   LoadingState,
   Muted,
+  PrimaryButton,
   SectionTitle,
   StatCard,
   StatusBadge,
@@ -124,6 +126,28 @@ export default function DashboardScreen() {
 
       {error && !data ? <ErrorNotice message={error} onRetry={reload} /> : null}
       {loading && !data ? <LoadingState label="ড্যাশবোর্ডের তথ্য আনা হচ্ছে..." /> : null}
+
+      {/* ── quick action: the same manual-order form the website has ── */}
+      <Card>
+        <View style={styles.quickAction}>
+          <View style={styles.quickActionIcon}>
+            <PlusCircle size={20} color={colors.brand[600]} strokeWidth={2.2} />
+          </View>
+          <View style={styles.quickActionText}>
+            <Text style={styles.quickActionTitle}>ফোনে অর্ডার নিয়েছেন?</Text>
+            <Muted>
+              কাস্টমারের নাম, নম্বর আর পণ্য দিয়ে সরাসরি অর্ডার যোগ করুন।
+            </Muted>
+          </View>
+        </View>
+        <View style={styles.quickActionButton}>
+          <PrimaryButton
+            label="ম্যানুয়াল অর্ডার যোগ করুন"
+            icon={PlusCircle}
+            onPress={() => router.push("/manual-order")}
+          />
+        </View>
+      </Card>
 
       {cards ? (
         <>
@@ -376,6 +400,23 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.bold,
     color: colors.slate[900],
   },
+
+  quickAction: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
+  quickActionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    backgroundColor: colors.brand[50],
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickActionText: { flex: 1, gap: 2 },
+  quickActionTitle: {
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.bold,
+    color: colors.slate[900],
+  },
+  quickActionButton: { marginTop: space.md },
 
   rangeRow: { flexDirection: "row", gap: space.sm },
   rangeChip: {

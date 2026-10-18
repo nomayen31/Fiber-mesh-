@@ -1,5 +1,6 @@
 import { seedProducts, type SeedProduct } from "@/content/products";
 import { prisma } from "@/lib/prisma";
+import { safeErrorText } from "@/lib/sanitize";
 import type { ProductSummary } from "@/lib/types";
 
 /** Product shape used by every UI component. */
@@ -63,7 +64,10 @@ export async function getProducts(): Promise<ProductView[]> {
       })),
     }));
   } catch (error) {
-    console.error("[catalog] database unavailable, using bundled catalogue:", error);
+    console.error(
+      "[catalog] database unavailable, using bundled catalogue:",
+      safeErrorText(error),
+    );
     return seedProducts.map(fromSeed);
   }
 }
@@ -101,7 +105,10 @@ export async function resolveOrderLine(
       return { productId: row.id, productName: row.name, unitPrice: row.price };
     }
   } catch (error) {
-    console.error("[catalog] resolveOrderLine fell back to static data:", error);
+    console.error(
+      "[catalog] resolveOrderLine fell back to static data:",
+      safeErrorText(error),
+    );
   }
 
   const fallback = seedProducts.find((product) => product.slug === slugOrId);

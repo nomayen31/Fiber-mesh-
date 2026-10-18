@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { guardAdmin, jsonError, jsonOk } from "@/lib/api";
+import { guardAdmin, jsonError, jsonOk, logError } from "@/lib/api";
 import { getDashboardStats, type StatsRange } from "@/lib/stats";
 
 export const runtime = "nodejs";
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     const stats = await getDashboardStats(range);
     return jsonOk(stats);
   } catch (error) {
-    console.error("[api/admin/stats] failed:", error);
+    logError("[api/admin/stats] failed:", error);
     return jsonError(
       "ডেটাবেস থেকে তথ্য আনা যায়নি। DATABASE_URL ঠিক আছে কিনা দেখুন।",
       500,

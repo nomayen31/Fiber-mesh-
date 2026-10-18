@@ -200,10 +200,20 @@ warning is expected for any app not installed from the Play Store.
    - **এই ফোনে নোটিফিকেশন** shows *"চালু আছে"*.
    - **সার্ভারের অবস্থা** is green (*push credentials configured*).
    - The phone appears in the **নিবন্ধিত ফোন** list.
-5. Place a test order on the website and confirm the notification arrives.
+5. Tap **টেস্ট নোটিফিকেশন → পাঠান** on the same screen. A test push should arrive
+   within a few seconds. This is the fastest proof that the server can reach *this*
+   phone, and it creates no order and no notification job — so use it first,
+   whenever you are unsure.
+6. Then place a test order on the website and confirm the notification arrives.
 
-If a card is amber or red, it names the exact problem. See
-[TESTING_CHECKLIST.md](./TESTING_CHECKLIST.md).
+Step 5 exists because a green card only means the credential *loaded*; it does not
+prove FCM accepted the message. The test button round-trips a real push.
+
+If a card is amber or red it names the exact problem — including the case where the
+credential variable **is** set but unusable, which the card reports in Bengali along
+with a sanitized reason code. See
+[TESTING_CHECKLIST.md](./TESTING_CHECKLIST.md) and
+[FIREBASE_SETUP.md](./FIREBASE_SETUP.md).
 
 ---
 

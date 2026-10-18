@@ -5,6 +5,8 @@
  * route handlers that declare `runtime = "nodejs"`.
  */
 
+import { MAX_SAFE_LENGTH, safeErrorText } from "@/lib/sanitize";
+
 /** The Android notification channel the mobile app creates before it can receive anything. */
 export const ANDROID_CHANNEL_ID = "orders_high";
 
@@ -59,18 +61,33 @@ export function isEventEnabled(eventType: NotifyEventType): boolean {
 export const MAX_JOB_ATTEMPTS = 5;
 
 /** Longest error string persisted on a job/delivery row. */
-export const MAX_ERROR_LENGTH = 400;
+export const MAX_ERROR_LENGTH = MAX_SAFE_LENGTH;
 
 /** A job younger than this is still eligible for automatic retry. */
 export const RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/** Trim and clamp an error message so raw SDK text can never flood the database. */
+/**
+ * How long a job may sit in `PROCESSING` before it is treated as orphaned.
+ *
+ * The inline dispatch runs in `after()`, i.e. *after* the response has been sent,
+ * so the platform is free to freeze or reclaim the instance mid-send. When that
+ * happens nothing writes a terminal status, and the row would stay `PROCESSING`
+ * forever — invisible to `listRetryableJobIds()`, which only offers `PENDING` and
+ * `FAILED`. A real send takes well under a second, so anything still `PROCESSING`
+ * after this long is never coming back.
+ *
+ * Retrying is safe: delivery is recorded per (job, device), and a device that
+ * already reached `SENT` is skipped, so the worst case is one extra push to a
+ * device whose row was not written before the instance died.
+ */
+export const STALE_PROCESSING_MS = 5 * 60 * 1000;
+
+/**
+ * Trim, redact and clamp an error message so raw SDK text can never flood the
+ * database or carry a credential. Delegates to the shared scrubber in
+ * `@/lib/sanitize` so persisted error strings and log lines are redacted the
+ * same way.
+ */
 export function safeError(error: unknown): string {
-  const text =
-    error instanceof Error
-      ? `${error.name}: ${error.message}`
-      : typeof error === "string"
-        ? error
-        : "unknown error";
-  return text.replace(/\s+/g, " ").slice(0, MAX_ERROR_LENGTH);
+  return safeErrorText(error);
 }

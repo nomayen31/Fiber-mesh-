@@ -15,6 +15,7 @@ import type {
   NotificationStore,
   UpsertDeliveryInput,
 } from "@/lib/notifications/store";
+import { STALE_PROCESSING_MS } from "@/lib/notifications/config";
 
 export type DeliveryRow = UpsertDeliveryInput & { id: string };
 
@@ -58,6 +59,7 @@ export class MemoryStore implements NotificationStore {
       attempts: 0,
       sentCount: 0,
       failedCount: 0,
+      updatedAt: new Date(),
     };
     this.jobs.set(job.id, job);
     return job;
@@ -71,6 +73,7 @@ export class MemoryStore implements NotificationStore {
     const job = this.jobs.get(id);
     if (!job) return;
     Object.assign(job, patch);
+    job.updatedAt = new Date();
   }
 
   async listActiveDevices(): Promise<DeviceRecord[]> {
@@ -92,6 +95,11 @@ export class MemoryStore implements NotificationStore {
     if (device) device.isActive = false;
   }
 
+  /**
+   * Mirrors the Prisma store: a `PROCESSING` row older than
+   * `STALE_PROCESSING_MS` is orphaned and offered again, because the instance
+   * that claimed it can be reclaimed mid-send without writing a terminal status.
+   */
   async listRetryableJobIds({
     maxAttempts,
     limit,
@@ -100,12 +108,14 @@ export class MemoryStore implements NotificationStore {
     maxAttempts: number;
     limit: number;
   }): Promise<string[]> {
+    const orphanedBefore = Date.now() - STALE_PROCESSING_MS;
     return [...this.jobs.values()]
-      .filter(
-        (job) =>
-          (job.status === "PENDING" || job.status === "FAILED") &&
-          job.attempts < maxAttempts,
-      )
+      .filter((job) => {
+        if (job.attempts >= maxAttempts) return false;
+        if (job.status === "PENDING" || job.status === "FAILED") return true;
+        if (job.status !== "PROCESSING") return false;
+        return (job.updatedAt?.getTime() ?? 0) < orphanedBefore;
+      })
       .slice(0, limit)
       .map((job) => job.id);
   }

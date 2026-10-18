@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { getClientIp, jsonError, jsonOk, rateLimit } from "@/lib/api";
+import { getClientIp, jsonError, jsonOk, logError, rateLimit } from "@/lib/api";
 import { createInquiry } from "@/lib/inquiries";
 import { queueInquiryNotification } from "@/lib/notifications/dispatch";
 import { scheduleDispatch } from "@/lib/notifications/schedule";
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     return jsonOk({ ok: true });
   } catch (error) {
-    console.error("[api/inquiries] failed to save inquiry:", error);
+    logError("[api/inquiries] failed to save inquiry:", error);
     return jsonError(
       "দুঃখিত, বার্তাটি পাঠানো যায়নি। অনুগ্রহ করে ফোনে যোগাযোগ করুন।",
       500,

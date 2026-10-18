@@ -43,18 +43,45 @@ export function bearerTokenFrom(
   return match?.[1] ?? null;
 }
 
+/**
+ * The development fallback. It is a **public constant in this repository**, so it
+ * must never be usable in production: anyone could sign their own admin token.
+ */
+const DEV_FALLBACK_SECRET = "dev-only-secret-change-me-please-0123456789abcdef";
+
 function getSecretKey(): Uint8Array {
-  const secret =
-    process.env.AUTH_SECRET ??
-    "dev-only-secret-change-me-please-0123456789abcdef";
-  if (secret.length < 32) {
-    // Fail loudly in production, keep working in development.
-    if (process.env.NODE_ENV === "production") {
+  const fromEnv = process.env.AUTH_SECRET?.trim();
+  const secret = fromEnv || DEV_FALLBACK_SECRET;
+
+  /**
+   * Fail closed in production.
+   *
+   * The old guard (`if (secret.length < 32) throw`) never fired, because the
+   * fallback is longer than 32 characters — so a deployment with no `AUTH_SECRET`
+   * silently signed admin sessions with a key published on GitHub.
+   *
+   * Throwing here is safe for verification (`verifyAdminToken` catches and
+   * returns `null`, i.e. "not signed in") and makes the *issuing* path fail
+   * loudly rather than hand out a forgeable token.
+   */
+  if (process.env.NODE_ENV === "production") {
+    if (!fromEnv) {
+      throw new Error(
+        "AUTH_SECRET is not set. Refusing to sign admin sessions with the built-in development secret in production. Generate one with: node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\"",
+      );
+    }
+    if (secret === DEV_FALLBACK_SECRET) {
+      throw new Error(
+        "AUTH_SECRET is set to the built-in development secret, which is public. Replace it with a real random value.",
+      );
+    }
+    if (secret.length < 32) {
       throw new Error(
         "AUTH_SECRET must be at least 32 characters long. Generate one with: node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\"",
       );
     }
   }
+
   return new TextEncoder().encode(secret.padEnd(32, "."));
 }
 

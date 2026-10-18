@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { guardAdmin, jsonError, jsonOk } from "@/lib/api";
+import { guardAdmin, jsonError, jsonOk, logError } from "@/lib/api";
 import { listInquiries } from "@/lib/inquiries";
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const data = await listInquiries({ page, pageSize, q, onlyUnread });
     return jsonOk(data);
   } catch (error) {
-    console.error("[api/admin/inquiries] list failed:", error);
+    logError("[api/admin/inquiries] list failed:", error);
     return jsonError("মেসেজ লিস্ট আনা যায়নি।", 500);
   }
 }

@@ -17,6 +17,13 @@
 
 import { Platform } from "react-native";
 import * as Device from "expo-device";
+/**
+ * `import/namespace` cannot follow `expo-notifications`' CommonJS interop and
+ * reports `AndroidImportance` / `AndroidNotificationVisibility` as missing.
+ * They are real runtime exports (verified against the package's build output)
+ * and TypeScript already checks them, so the rule is off for this file only.
+ */
+/* eslint-disable import/namespace */
 import * as Notifications from "expo-notifications";
 
 /**

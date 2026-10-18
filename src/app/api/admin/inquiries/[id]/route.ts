@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { guardAdmin, jsonError, jsonOk } from "@/lib/api";
+import { guardAdmin, jsonError, jsonOk, logError } from "@/lib/api";
 import { deleteInquiry, toggleInquiryRead } from "@/lib/inquiries";
 
 export const runtime = "nodejs";
@@ -27,7 +27,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const inquiry = await toggleInquiryRead(id, isRead);
     return jsonOk({ ok: true, inquiry });
   } catch (error) {
-    console.error("[api/admin/inquiries/:id] update failed:", error);
+    logError("[api/admin/inquiries/:id] update failed:", error);
     return jsonError("আপডেট করা যায়নি।", 500);
   }
 }
@@ -43,7 +43,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     await deleteInquiry(id);
     return jsonOk({ ok: true });
   } catch (error) {
-    console.error("[api/admin/inquiries/:id] delete failed:", error);
+    logError("[api/admin/inquiries/:id] delete failed:", error);
     return jsonError("ডিলিট করা যায়নি।", 500);
   }
 }

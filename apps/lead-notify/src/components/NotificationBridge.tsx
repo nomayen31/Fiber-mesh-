@@ -33,7 +33,7 @@ import {
   type LeadTarget,
 } from "@/lib/push";
 import { useSession } from "@/lib/session";
-import type { DeviceRegisterResponse } from "@/lib/types";
+import type { DeviceRegisterResponse, PushTestResponse } from "@/lib/types";
 
 export type PushStatus =
   | { state: "idle" }
@@ -49,12 +49,19 @@ export type PushContextValue = {
   leadSignal: number;
   /** Re-run the whole permission + token + registration flow (Settings button). */
   retry: () => void;
+  /**
+   * Ask the server to push a test notification to this admin's registered
+   * devices. Resolves with the per-device FCM outcome; throws an `ApiError`
+   * (with a Bengali message) when the request itself fails.
+   */
+  sendTest: () => Promise<PushTestResponse>;
 };
 
 const PushContext = createContext<PushContextValue>({
   status: { state: "idle" },
   leadSignal: 0,
   retry: () => undefined,
+  sendTest: async () => ({ ok: true, sentCount: 0, results: [] }),
 });
 
 export function usePush(): PushContextValue {
@@ -215,9 +222,14 @@ export function PushProvider({ children }: { children: ReactNode }) {
 
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
 
+  const sendTest = useCallback(
+    () => request((api) => api.post<PushTestResponse>("/api/admin/notifications/test", {})),
+    [request],
+  );
+
   const value = useMemo<PushContextValue>(
-    () => ({ status, leadSignal, retry }),
-    [status, leadSignal, retry],
+    () => ({ status, leadSignal, retry, sendTest }),
+    [status, leadSignal, retry, sendTest],
   );
 
   return <PushContext.Provider value={value}>{children}</PushContext.Provider>;

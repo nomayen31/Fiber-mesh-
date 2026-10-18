@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import {
+  CheckCircle2,
   Copy,
   Info,
   MapPin,
@@ -57,7 +58,7 @@ import { colors, radius, space, typography } from "@/theme";
  * dashboard offers, via the same `PATCH` endpoint.
  */
 export default function OrderDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, created } = useLocalSearchParams<{ id: string; created?: string }>();
   const { request } = useSession();
 
   const [order, setOrder] = useState<Order | null>(null);
@@ -144,6 +145,17 @@ export default function OrderDetailScreen() {
         }
       >
         {loading && !order ? <LoadingState label="অর্ডার আনা হচ্ছে..." /> : null}
+
+        {/* ── confirmation for an order just typed in from the manual form ── */}
+        {created === "1" && order ? (
+          <View style={styles.successBox}>
+            <CheckCircle2 size={16} color={colors.emerald[700]} />
+            <Text style={styles.successText}>
+              নতুন অর্ডার {order.orderNo} সেভ হয়েছে। ওয়েবসাইটের অর্ডার
+              তালিকাতেও এটি এখনই দেখা যাবে।
+            </Text>
+          </View>
+        ) : null}
 
         {error && !order ? (
           <>
@@ -370,6 +382,23 @@ function whatsappUrl(phone: string): string {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.slate[100] },
   content: { padding: space.lg, gap: space.lg, paddingBottom: space.xxl },
+
+  successBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.sm,
+    backgroundColor: colors.emerald[50],
+    borderWidth: 1,
+    borderColor: colors.emerald[200],
+    borderRadius: radius.md,
+    padding: space.md,
+  },
+  successText: {
+    flex: 1,
+    fontSize: typography.size.sm,
+    color: colors.emerald[700],
+    lineHeight: 20,
+  },
 
   headRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: space.md },
   headText: { flex: 1, gap: 2 },

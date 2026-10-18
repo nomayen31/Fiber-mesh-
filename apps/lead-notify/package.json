@@ -28,6 +28,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.3.0",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~58.0.4",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -38,7 +40,8 @@
     "doctor": "expo-doctor",
     "prebuild": "expo prebuild --platform android --clean",
     "build:apk": "eas build --platform android --profile preview",
-    "build:apk:prod": "eas build --platform android --profile production"
+    "build:apk:prod": "eas build --platform android --profile production",
+    "lint": "expo lint"
   },
   "private": true
 }

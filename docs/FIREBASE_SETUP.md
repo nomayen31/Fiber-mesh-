@@ -176,6 +176,12 @@ send pushes too), then redeploy.
 The backend also accepts the **raw** JSON (starting with `{`) in this same
 variable, so either form works.
 
+The reader accepts the file exactly as Firebase writes it — **snake_case**
+(`project_id`, `client_email`, `private_key`) — and also the camelCase spelling, so
+a hand-written variable works too. It normalises `private_key` whether the newlines
+arrived escaped (`\n`) or as real line breaks, and it insists on a PEM block before
+handing the credential to the SDK.
+
 ### Option 2 — three discrete variables
 
 If you prefer separate values, set all three. Open the downloaded JSON and copy
@@ -190,6 +196,9 @@ the matching fields:
 The private key contains newlines. Paste it **with the surrounding quotes and
 the literal `\n` sequences** exactly as they appear in the JSON file. The backend
 converts `\n` back into real newlines for you.
+
+Whichever option you pick, the JSON field **names** are the thing to get right:
+Firebase writes `project_id` / `client_email` / `private_key`.
 
 ### Part B, locally
 
@@ -209,11 +218,16 @@ configure.
 ### On the server
 
 Sign in to the app and open the **সেটিংস (Settings)** tab. The **সার্ভারের অবস্থা**
-card tells you the truth directly:
+card tells you the truth directly, and there are three states — not two:
 
-- green — *"সার্ভারে পুশ পাঠানোর সেটআপ সম্পূর্ণ"* — credentials are loaded.
-- amber — *"সার্ভারে Firebase Admin কী সেট করা নেই"* — and it lists the exact
-  missing variable names.
+- green — *"সার্ভারে পুশ পাঠানোর সেটআপ সম্পূর্ণ"* — credentials are loaded and a push
+  can be attempted.
+- amber, *"…সেট করা নেই"* — no credential at all, and it lists the exact missing
+  variable **names**.
+- amber, *"…আছে, কিন্তু সেটি ব্যবহার করা যাচ্ছে না"* — the variable **is** set but
+  unusable. This is the state that used to look like success. The card now prints the
+  reason in Bengali plus the sanitized `pushConfigIssue` code — e.g.
+  `missing-fields (missing: private_key)`, `invalid-private-key`, `invalid-json`.
 
 The same information is available without the app:
 
@@ -228,9 +242,29 @@ curl -s https://fiber-mesh.vercel.app/api/admin/devices \
   "devices": [ ... ],
   "pushConfigured": true,
   "missingServerKeys": [],
+  "pushConfigIssue": null,
   "enabledEvents": ["order.created", "inquiry.created"]
 }
 ```
+
+`pushConfigIssue` names the offending **field** and never carries any part of a value:
+
+| `code` | Meaning |
+|---|---|
+| `no-credentials` | Nothing is set (the same case `missingServerKeys` reports). |
+| `invalid-json` | The variable is neither JSON nor base64-encoded JSON. |
+| `missing-fields` | Valid JSON, but a required field is absent — `detail` names it. |
+| `invalid-private-key` | `private_key` is not a PEM block. |
+| `init-failed` | The Admin SDK itself rejected the credential. |
+
+### The in-app test button
+
+The Settings tab also has a **test notification** card. Tapping it asks the server to
+send one push **to your own registered device only** (`POST /api/admin/notifications/test`).
+It is rate limited to 5 attempts per 10 minutes, sends a fixed payload with no customer
+data, and never creates a `NotificationJob` — so a test can never pollute the real
+delivery history or the retry queue. The result is shown in Bengali, and a dead token is
+deactivated on the spot.
 
 ### On the phone
 
@@ -268,6 +302,14 @@ These are enforced by the code, but they are worth stating plainly:
    generate a new one, and update the Vercel variable. Registered phones do not
    need to be touched — they keep working, because the token is an FCM token, not
    a credential derived from the key.
+6. **Logs and stored error strings are scrubbed.** Every API failure goes through
+   `logError()` (`src/lib/api.ts`), which runs the value through `src/lib/sanitize.ts`
+   first: PEM blocks, JSON `private_key` fields, JWTs, `Bearer` credentials, `AIza…`
+   keys, credential-bearing `postgres://` URLs and long base64 runs (service-account
+   blobs, FCM tokens) are replaced with a fixed label, the text is collapsed to one
+   line and clamped to 400 characters. The same scrubber backs
+   `NotificationJob.lastError`, so a failing send cannot write a device token into
+   the database. `tests/sanitize.test.ts` covers this.
 
 ---
 
@@ -309,7 +351,8 @@ UPDATE "DeviceToken" SET "isActive" = false WHERE label LIKE '%Pixel%';
 |---|---|---|
 | Notification arrives while the app is open, but not when it is closed | The APK was built without the Firebase SDK. | Rebuild; `google-services.json` must exist **at build time**, not just at runtime. |
 | `pushConfigured: false` and `missingServerKeys` lists all three names | Neither option above was set. | Set `FIREBASE_SERVICE_ACCOUNT_JSON`, then redeploy. |
-| `pushConfigured: false` even though the variables are set | The value was pasted with surrounding quotes into Vercel, or the key is truncated. | Re-paste the raw value. Storing the JSON base64-encoded (Option 1) avoids this entirely. |
+| `pushConfigured: false` even though the variables are set | The credential is set but the server cannot use it. | Read `pushConfigIssue` (or the amber Settings card). `missing-fields` is the classic one: the field names in the JSON do not match. This was a real bug until 18 Oct 2026 — the reader demanded `projectId`/`clientEmail`/`privateKey` while Firebase writes `project_id`/`client_email`/`private_key`. Both spellings work now. Check that no variable is quoted, that `private_key` is a full PEM block, and that the service-account key has not been deleted in Google Cloud. |
+| `pushConfigured: false` because the environment variable was added *after* the last deploy | A Next.js deployment reads its environment at build time. | Redeploy. Adding a Vercel variable does nothing to a deployment that is already running. |
 | Settings says the device registered, but nothing ever arrives | The notification *type* is switched off. | Check `NOTIFY_EVENTS` in the Vercel environment. Default is `order.created,inquiry.created`. |
 | Delivery rows show `FAILED` with a `registration-token-not-registered` error | The app was uninstalled or its data cleared, so FCM dropped the token. | Working as designed: the device is deactivated automatically. Log in again on the phone to re-register. |
 | Nothing at all appears in the Settings device list | Permission was never granted. | Grant notification permission, then tap **আবার চালু করার চেষ্টা** (try again). |

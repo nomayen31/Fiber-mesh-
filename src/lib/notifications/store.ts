@@ -12,6 +12,7 @@
  */
 
 import { Prisma, type DeliveryStatus } from "@prisma/client";
+import { STALE_PROCESSING_MS } from "@/lib/notifications/config";
 import { prisma } from "@/lib/prisma";
 
 export type NotificationJobRecord = {
@@ -31,6 +32,11 @@ export type NotificationJobRecord = {
    * never reads it back.
    */
   lastError?: string | null;
+  /**
+   * When the row last changed. Read only to decide whether a `PROCESSING` job is
+   * orphaned (see `STALE_PROCESSING_MS`) — never by the dispatcher itself.
+   */
+  updatedAt?: Date;
 };
 
 export type DeviceRecord = {
@@ -94,6 +100,7 @@ const JOB_SELECT = {
   attempts: true,
   sentCount: true,
   failedCount: true,
+  updatedAt: true,
 } as const;
 
 function asPayload(value: Prisma.JsonValue): Record<string, string> {
@@ -200,11 +207,18 @@ export const prismaNotificationStore: NotificationStore = {
   },
 
   async listRetryableJobIds({ since, maxAttempts, limit }) {
+    const orphanedBefore = new Date(Date.now() - STALE_PROCESSING_MS);
     const rows = await prisma.notificationJob.findMany({
       where: {
-        status: { in: ["PENDING", "FAILED"] },
-        attempts: { lt: maxAttempts },
         createdAt: { gte: since },
+        attempts: { lt: maxAttempts },
+        OR: [
+          // Never attempted, or attempted and failed.
+          { status: { in: ["PENDING", "FAILED"] } },
+          // Attempted, then the instance died mid-send without writing a
+          // terminal status. Without this branch the row is stranded forever.
+          { status: "PROCESSING", updatedAt: { lt: orphanedBefore } },
+        ],
       },
       orderBy: { createdAt: "asc" },
       take: limit,
